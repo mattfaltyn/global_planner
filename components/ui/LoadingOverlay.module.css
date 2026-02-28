@@ -1,0 +1,35 @@
+.overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(180deg, rgba(2, 8, 20, 0.55), rgba(2, 8, 20, 0.82));
+}
+
+.card {
+  width: min(420px, calc(100vw - 48px));
+  padding: 28px;
+  border-radius: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(8, 16, 30, 0.86);
+  box-shadow: var(--shadow);
+}
+
+.kicker {
+  margin: 0 0 8px;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.72rem;
+}
+
+.card h2 {
+  margin: 0 0 10px;
+  font-family: var(--font-display), Georgia, serif;
+}
+
+.card p:last-child {
+  margin-bottom: 0;
+  color: var(--muted);
+}

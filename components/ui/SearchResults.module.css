@@ -1,0 +1,42 @@
+.results {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 18px;
+  background: rgba(8, 15, 28, 0.9);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(18px);
+}
+
+.item,
+.active {
+  width: 100%;
+  border: 0;
+  padding: 14px;
+  border-radius: 14px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+}
+
+.active {
+  background: rgba(108, 228, 255, 0.14);
+}
+
+.primary,
+.secondary,
+.code {
+  display: block;
+}
+
+.primary {
+  font-weight: 600;
+}
+
+.secondary,
+.code {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}

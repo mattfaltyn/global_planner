@@ -1,0 +1,62 @@
+:root {
+  color-scheme: dark;
+  --background: #06111f;
+  --panel: rgba(8, 16, 30, 0.82);
+  --panel-border: rgba(137, 180, 255, 0.18);
+  --text: #edf4ff;
+  --muted: #9cb3cc;
+  --accent: #6ce4ff;
+  --accent-strong: #8efbff;
+  --warm: #ffb463;
+  --danger: #ff867f;
+  --shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+  --radius-lg: 24px;
+  --radius-md: 18px;
+  --radius-sm: 12px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background:
+    radial-gradient(circle at top, rgba(91, 173, 255, 0.16), transparent 30%),
+    linear-gradient(180deg, #071321 0%, #020814 100%);
+  color: var(--text);
+  font-family: var(--font-ui), "SF Pro Display", "Segoe UI", sans-serif;
+}
+
+body {
+  min-height: 100vh;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

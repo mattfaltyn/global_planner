@@ -1,0 +1,28 @@
+.wrap {
+  position: relative;
+  width: min(460px, calc(100vw - 48px));
+}
+
+.label {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+.input {
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 18px;
+  background: rgba(8, 15, 28, 0.82);
+  color: var(--text);
+  padding: 16px 18px;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(18px);
+}
+
+.input::placeholder {
+  color: rgba(237, 244, 255, 0.45);
+}

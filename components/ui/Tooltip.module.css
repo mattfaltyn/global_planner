@@ -1,0 +1,27 @@
+.tooltip {
+  position: absolute;
+  z-index: 4;
+  min-width: 180px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(8, 12, 22, 0.92);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(14px);
+  transform: translate(-50%, calc(-100% - 16px));
+  pointer-events: none;
+}
+
+.tooltip strong,
+.tooltip span {
+  display: block;
+}
+
+.tooltip strong {
+  margin-bottom: 4px;
+}
+
+.tooltip span {
+  color: var(--muted);
+  font-size: 0.88rem;
+}

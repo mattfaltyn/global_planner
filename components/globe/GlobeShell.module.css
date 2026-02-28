@@ -1,0 +1,67 @@
+.shell {
+  position: relative;
+  min-height: 100vh;
+  overflow: hidden;
+}
+
+.backgroundGlow {
+  position: absolute;
+  inset: auto auto -25vh -15vw;
+  width: 60vw;
+  height: 60vw;
+  background: radial-gradient(circle, rgba(108, 228, 255, 0.12), transparent 65%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.canvasPlaceholder {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 50% 45%, rgba(81, 119, 181, 0.28), transparent 18%),
+    linear-gradient(180deg, rgba(10, 18, 32, 0.3), rgba(2, 8, 20, 0));
+}
+
+.topBar,
+.legendWrap,
+.panelWrap {
+  position: absolute;
+  z-index: 2;
+}
+
+.topBar {
+  top: 24px;
+  left: 24px;
+}
+
+.legendWrap {
+  left: 24px;
+  bottom: 24px;
+}
+
+.panelWrap {
+  top: 24px;
+  right: 24px;
+  bottom: 24px;
+  display: flex;
+  align-items: stretch;
+}
+
+@media (max-width: 960px) {
+  .topBar {
+    top: 16px;
+    left: 16px;
+    right: 16px;
+  }
+
+  .legendWrap {
+    left: 16px;
+    right: 16px;
+    bottom: 136px;
+  }
+
+  .panelWrap {
+    inset: auto 0 0;
+    align-items: flex-end;
+  }
+}

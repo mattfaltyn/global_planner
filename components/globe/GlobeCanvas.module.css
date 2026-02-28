@@ -1,0 +1,8 @@
+.canvas {
+  position: absolute;
+  inset: 0;
+}
+
+.canvas :global(canvas) {
+  display: block;
+}

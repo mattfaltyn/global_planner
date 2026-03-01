@@ -66,7 +66,7 @@ export function ItineraryDock({
   showRecenter = false,
   onSetMode,
   onToggleCollapsed,
-  onRecenter = () => undefined,
+  onRecenter,
   onSelectStop,
   onMoveStopUp,
   onMoveStopDown,
@@ -192,7 +192,7 @@ export function ItineraryDock({
             </div>
           ) : null}
 
-          {showRecenter ? (
+          {showRecenter && onRecenter ? (
             <div className={styles.section}>
               <button type="button" className={styles.toggleButton} onClick={onRecenter}>
                 Recenter

@@ -47,7 +47,7 @@ export function TripPlaybackBar({
   onSpeedChange,
   onProgressChange,
   onOpenEdit,
-  onRecenter = () => undefined,
+  onRecenter,
 }: TripPlaybackBarProps) {
   const { currentStop, nextStop } = getCurrentStopPair(stops, playback, legs);
   const daySummary = getPlaybackDaySummary(stops, legs, playback);
@@ -109,7 +109,7 @@ export function TripPlaybackBar({
           <button type="button" className={styles.secondaryButton} onClick={onOpenEdit}>
             {layoutMode === "mobile" ? "Edit" : "Edit trip"}
           </button>
-          {showRecenter ? (
+          {showRecenter && onRecenter ? (
             <button
               type="button"
               className={styles.secondaryButton}

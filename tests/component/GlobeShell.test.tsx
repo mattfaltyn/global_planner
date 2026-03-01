@@ -154,48 +154,50 @@ describe("GlobeShell", () => {
 
     await waitForElementToBeRemoved(() => screen.getByTestId("loading-overlay"));
 
-    await user.click(screen.getByRole("button", { name: "hover-stop" }));
+    fireEvent.click(screen.getByRole("button", { name: "hover-stop" }));
     expect(screen.getByRole("status")).toHaveTextContent("Vancouver");
 
-    await user.click(screen.getByRole("button", { name: "hover-leg" }));
+    fireEvent.click(screen.getByRole("button", { name: "hover-leg" }));
     expect(screen.getByRole("status")).toHaveTextContent("Lisbon -> Barcelona");
 
-    await user.click(screen.getByRole("button", { name: "clear-hover" }));
+    fireEvent.click(screen.getByRole("button", { name: "clear-hover" }));
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "select-leg" }));
+    fireEvent.click(screen.getByRole("button", { name: "select-leg" }));
     expect(screen.getByText("Leg editor")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Ground" }));
+    fireEvent.click(screen.getByRole("button", { name: "Ground" }));
     expect(screen.getByTestId("selected-leg-mode")).toHaveTextContent("ground");
-    await user.click(screen.getByRole("button", { name: "Play this leg" }));
+    fireEvent.click(screen.getByRole("button", { name: "Play this leg" }));
     expect(screen.getByRole("button", { name: "Pause" })).toBeInTheDocument();
     await act(async () => {
       globeProps?.onAutoFollowSuspendedChange?.(true);
     });
     expect(screen.getAllByRole("button", { name: "Recenter" })).toHaveLength(2);
-    await user.click(screen.getAllByRole("button", { name: "Recenter" })[0]);
-    await user.click(screen.getByRole("button", { name: "Pause" }));
-    await user.click(screen.getByRole("button", { name: "Reset" }));
-    await user.click(screen.getByRole("button", { name: "Previous" }));
-    await user.click(screen.getByRole("button", { name: "Next" }));
-    await user.selectOptions(screen.getByLabelText("Playback speed"), "2");
+    fireEvent.click(screen.getAllByRole("button", { name: "Recenter" })[0]);
+    fireEvent.click(screen.getByRole("button", { name: "Pause" }));
+    fireEvent.click(screen.getByRole("button", { name: "Reset" }));
+    fireEvent.click(screen.getByRole("button", { name: "Previous" }));
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.change(screen.getByLabelText("Playback speed"), { target: { value: "2" } });
     fireEvent.change(screen.getByLabelText(/Trip progress:/), { target: { value: "20" } });
 
-    await user.click(screen.getByRole("button", { name: "select-stop" }));
+    fireEvent.click(screen.getByRole("button", { name: "select-stop" }));
     expect(screen.getByDisplayValue("Porto")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Replace anchor with search" }));
+    fireEvent.click(screen.getByRole("button", { name: "Replace anchor with search" }));
     expect(screen.getByPlaceholderText("Replace anchor with a city or airport")).toBeInTheDocument();
     await user.type(screen.getByLabelText("Search airports"), "FAO");
     await user.click(screen.getByRole("button", { name: /faro airport/i }));
-    expect(screen.getByDisplayValue("Faro")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /1. Vancouver/i }));
-    await user.click(screen.getAllByRole("button", { name: "Up" })[0]);
-    await user.click(screen.getAllByRole("button", { name: "Down" })[0]);
-    await user.click(screen.getAllByRole("button", { name: "Insert after" })[0]);
+    await waitFor(() => {
+      expect(screen.getByDisplayValue("Faro")).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole("button", { name: /1. Vancouver/i }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Up" })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: "Down" })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: "Insert after" })[0]);
     fireEvent.change(screen.getByLabelText("Label"), { target: { value: "Vancouver Hub" } });
-    await user.click(screen.getAllByRole("button", { name: "Remove" })[1]);
-    await user.click(screen.getByRole("button", { name: "clear-selection" }));
-    await user.click(screen.getByRole("button", { name: "Playback" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Remove" })[1]);
+    fireEvent.click(screen.getByRole("button", { name: "clear-selection" }));
+    fireEvent.click(screen.getByRole("button", { name: "Playback" }));
 
     expect(screen.queryByText("Nothing selected")).not.toBeInTheDocument();
   }, 10000);

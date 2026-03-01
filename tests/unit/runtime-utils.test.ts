@@ -27,6 +27,7 @@ import { getRouteAltitude, getRouteStroke } from "../../lib/globe/routeGeometry"
 import { appReducer, initialAppState } from "../../lib/state/appState";
 import { assertExists } from "../../lib/utils/assert";
 import { createFixtureDataset, createResolvedFixtureItinerary } from "../fixtures/dataset";
+import { buildLegPathPoints } from "../../lib/itinerary/interpolation";
 
 describe("runtime config and utility modules", () => {
   it("exports the expected Next.js and Playwright config", () => {
@@ -74,6 +75,13 @@ describe("runtime config and utility modules", () => {
     expect(stopContextPointOfView.lng).toBeCloseTo(-93.3236, 3);
     expect(stopContextPointOfView.altitude).toBe(1.02);
     expect(
+      getStopContextPointOfView({ lat: 49.1947, lon: -123.1792 }, [])
+    ).toEqual({
+      lat: 49.1947,
+      lng: -123.1792,
+      altitude: 0.76,
+    });
+    expect(
       getLegPointOfView(
         { lat: null, lon: null },
         { lat: 41.2481, lon: -8.6814 }
@@ -117,6 +125,15 @@ describe("runtime config and utility modules", () => {
     expect(lateGroundPlaybackFollowPointOfView.lat).toBeCloseTo(37.376172);
     expect(lateGroundPlaybackFollowPointOfView.lng).toBeCloseTo(-8.1403045);
     expect(lateGroundPlaybackFollowPointOfView.altitude).toBe(0.56);
+    expect(
+      getPlaybackFollowPointOfView(
+        { lat: null, lon: null },
+        { lat: 41.2481, lon: -8.6814 },
+        "air",
+        7490,
+        "travel"
+      )
+    ).toEqual(getOverviewPointOfView([{ lat: null, lon: null }, { lat: 41.2481, lon: -8.6814 }]));
     expect(
       getPlaybackFollowPointOfView(
         { lat: 37.5, lon: -8.2 },
@@ -271,6 +288,9 @@ describe("runtime config and utility modules", () => {
     expect(getRouteAltitude(30000)).toBeCloseTo(0.2);
     expect(getRouteStroke(1000, false)).toBeCloseTo(0.14);
     expect(getRouteStroke(12000, true)).toBeCloseTo(0.7254545455);
+    expect(
+      Math.max(...buildLegPathPoints(stops[0], stops[1], "air").map((point) => point.altitude))
+    ).toBeGreaterThan(0.018);
   });
 
   it("loads the dataset and builds indexes", async () => {

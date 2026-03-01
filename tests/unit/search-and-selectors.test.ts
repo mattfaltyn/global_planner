@@ -29,6 +29,7 @@ import {
 import {
   getItineraryFitPointOfView,
   getPlaybackCalendarProgressPercent,
+  getCurrentStopPair,
   getLegByIndex,
   getPlaybackDaySummary,
   getPlaybackProgressPercent,
@@ -258,6 +259,168 @@ describe("itinerary search, selectors, and helpers", () => {
     expect(itineraryPointOfView.altitude).toBe(1.62);
     expect(getTripProgressFromCalendarProgress(stops, legs, 1, 0.25)).toBeGreaterThan(0.2);
     expect(getTripProgressFromCalendarProgress(stops, legs, 1, 0.25)).toBeLessThan(0.25);
+  });
+
+  it("handles playback date summaries for orphaned legs and medium-haul air altitude", () => {
+    const { stops } = createResolvedFixtureItinerary();
+    const orphanLeg = {
+      id: "missing-a__missing-b",
+      fromStopId: "missing-a",
+      toStopId: "missing-b",
+      mode: "air" as const,
+      distanceKm: 2000,
+      pathPoints: [],
+    };
+    const orphanPlayback = {
+      status: "paused" as const,
+      speed: 1 as const,
+      tripProgress: 0.5,
+      activeLegIndex: 0,
+      activeLegProgress: 0.5,
+      phase: "travel" as const,
+    };
+    const mediumHaulPath = buildLegPathPoints(
+      {
+        ...stops[1],
+        id: "mh-a",
+        lat: 41.1579,
+        lon: -8.6291,
+      },
+      {
+        ...stops[2],
+        id: "mh-b",
+        lat: 52.52,
+        lon: 13.405,
+      },
+      "air"
+    );
+
+    expect(getPlaybackDaySummary(stops, [orphanLeg], orphanPlayback)).toEqual({
+      currentDay: 35,
+      totalDays: 50,
+      currentDateLabel: "Thu, Mar 26, 2026",
+      rangeLabel: "Fri, Feb 20, 2026 -> Fri, Apr 10, 2026",
+    });
+    expect(getPlaybackCalendarProgressPercent(stops, [orphanLeg], orphanPlayback)).toBe(69);
+    expect(Math.max(...mediumHaulPath.map((point) => point.altitude))).toBeCloseTo(0.018, 6);
+  });
+
+  it("covers playback date fallbacks for missing active legs and zero-duration segment math", () => {
+    const { stops, legs } = createResolvedFixtureItinerary();
+
+    expect(
+      getPlaybackDaySummary(stops, [], {
+        status: "paused",
+        speed: 1,
+        tripProgress: 0.4,
+        activeLegIndex: 0,
+        activeLegProgress: 0,
+        phase: "travel",
+      })
+    ).toEqual({
+      currentDay: 50,
+      totalDays: 50,
+      currentDateLabel: "Fri, Apr 10, 2026",
+      rangeLabel: "Fri, Feb 20, 2026 -> Fri, Apr 10, 2026",
+    });
+
+    expect(
+      getPlaybackDaySummary(stops, legs, {
+        status: "paused",
+        speed: Infinity as unknown as 1,
+        tripProgress: 0.5,
+        activeLegIndex: 0,
+        activeLegProgress: 0,
+        phase: "travel",
+      })
+    ).toEqual({
+      currentDay: 2,
+      totalDays: 50,
+      currentDateLabel: "Sat, Feb 21, 2026",
+      rangeLabel: "Fri, Feb 20, 2026 -> Fri, Apr 10, 2026",
+    });
+
+    expect(
+      getPlaybackCalendarProgressPercent(
+        [{ ...stops[0], arrivalDate: "2026-02-20", departureDate: "2026-02-20" }],
+        [],
+        {
+          status: "paused",
+          speed: 1,
+          tripProgress: 0.5,
+          activeLegIndex: 0,
+          activeLegProgress: 0,
+          phase: "travel",
+        }
+      )
+    ).toBe(100);
+
+    expect(
+      getTripProgressFromCalendarProgress(
+        [{ ...stops[0], departureDate: null }],
+        [],
+        1,
+        0.4
+      )
+    ).toBe(0.4);
+
+    expect(
+      getCurrentStopPair(stops, createInitialPlaybackState(), [
+        {
+          id: "ghost-a__ghost-b",
+          fromStopId: "ghost-a",
+          toStopId: "ghost-b",
+          mode: "ground",
+          distanceKm: null,
+          pathPoints: [],
+        },
+      ])
+    ).toEqual({
+      currentStop: null,
+      nextStop: null,
+    });
+
+    expect(
+      getPlaybackDaySummary(
+        [
+          {
+            ...stops[0],
+            id: "fallback-from",
+            arrivalDate: "2026-02-20",
+            departureDate: null,
+          },
+          {
+            ...stops[1],
+            id: "fallback-to",
+            arrivalDate: null,
+            departureDate: "2026-02-21",
+          },
+        ],
+        [
+          {
+            id: "fallback-from__fallback-to",
+            fromStopId: "fallback-from",
+            toStopId: "fallback-to",
+            mode: "ground",
+            distanceKm: 10,
+            pathPoints: [],
+          },
+        ],
+        {
+          status: "paused",
+          speed: 1,
+          tripProgress: 0.5,
+          activeLegIndex: 0,
+          activeLegProgress: 0,
+          phase: "travel",
+        }
+      )
+    ).toEqual({
+      currentDay: 1,
+      totalDays: 1,
+      currentDateLabel: "Fri, Feb 20, 2026",
+      rangeLabel: "Sat, Feb 21, 2026 -> Sat, Feb 21, 2026",
+    });
   });
 
   it("builds whole-trip timeline frames, low path endpoints, and playback progression", () => {

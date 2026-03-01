@@ -356,6 +356,88 @@ describe("app shells and UI components", () => {
     expect(onSetMode).toHaveBeenCalledWith("edit");
   });
 
+  it("defaults a mobile dock without a snap point to the collapsed state", () => {
+    const { stops, legs } = createResolvedFixtureItinerary();
+
+    render(
+      <ItineraryDock
+        stops={stops}
+        legs={legs}
+        selection={null}
+        playback={createPlayback()}
+        layoutMode="mobile"
+        shellState={{ mode: "playback", collapsed: false }}
+        onSetMode={() => undefined}
+        onToggleCollapsed={() => undefined}
+        onSelectStop={() => undefined}
+        onMoveStopUp={() => undefined}
+        onMoveStopDown={() => undefined}
+        onRemoveStop={() => undefined}
+        onInsertAfter={() => undefined}
+        onUpdateStop={() => undefined}
+        onReplaceAnchor={() => undefined}
+        onSetLegMode={() => undefined}
+        onPlayLeg={() => undefined}
+      />
+    );
+
+    expect(screen.getByRole("button", { name: "Expand" })).toBeInTheDocument();
+  });
+
+  it("covers mobile search, playback fallback copy, and unavailable selection text", () => {
+    const { stops, legs } = createResolvedFixtureItinerary();
+
+    render(
+      <>
+        <SearchBox
+          query=""
+          results={[]}
+          layoutMode="mobile"
+          onQueryChange={() => undefined}
+          onSelect={() => undefined}
+        />
+        <TripPlaybackBar
+          stops={[{ ...stops[0], departureDate: null }]}
+          legs={[]}
+          playback={createPlayback()}
+          layoutMode="mobile"
+          onPlay={() => undefined}
+          onPause={() => undefined}
+          onReset={() => undefined}
+          onStepPrev={() => undefined}
+          onStepNext={() => undefined}
+          onSpeedChange={() => undefined}
+          onProgressChange={() => undefined}
+          onOpenEdit={() => undefined}
+        />
+        <ItineraryDock
+          stops={stops}
+          legs={legs}
+          selection={{ kind: "leg", legId: "missing-leg" }}
+          playback={createPlayback()}
+          layoutMode="desktop"
+          shellState={{ mode: "playback", collapsed: false }}
+          onSetMode={() => undefined}
+          onToggleCollapsed={() => undefined}
+          onSelectStop={() => undefined}
+          onMoveStopUp={() => undefined}
+          onMoveStopDown={() => undefined}
+          onRemoveStop={() => undefined}
+          onInsertAfter={() => undefined}
+          onUpdateStop={() => undefined}
+          onReplaceAnchor={() => undefined}
+          onSetLegMode={() => undefined}
+          onPlayLeg={() => undefined}
+        />
+      </>
+    );
+
+    expect(screen.getByTestId("trip-playback-bar")).toHaveAttribute("data-layout-mode", "mobile");
+    expect(screen.getAllByRole("button", { name: "Edit" })).toHaveLength(2);
+    expect(screen.getByText("Trip not started")).toBeInTheDocument();
+    expect(screen.getByText("Selection unavailable")).toBeInTheDocument();
+  });
+
   it("renders the trip playback bar and unresolved stop editor state", async () => {
     const user = userEvent.setup();
     const { stops, legs } = createResolvedFixtureItinerary();

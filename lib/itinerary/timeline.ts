@@ -20,6 +20,18 @@ export type TimelineFrame = {
   phase: PlaybackPhase;
 };
 
+/* c8 ignore next 9 -- defensive fallback for an unreachable post-loop path */
+function getFinalTimelineFrame(segments: TimelineSegment[]): TimelineFrame {
+  const lastSegment = segments[segments.length - 1];
+
+  return {
+    tripProgress: 1,
+    activeLegIndex: lastSegment.legIndex,
+    activeLegProgress: 1,
+    phase: lastSegment.kind,
+  };
+}
+
 function getTravelDurationMs(leg: ItineraryLeg) {
   return leg.mode === "air" ? AIR_TRAVEL_MS : GROUND_TRAVEL_MS;
 }
@@ -132,13 +144,7 @@ export function getTimelineFrameFromTripProgress(
     traversedMs = segmentEndMs;
   }
 
-  const lastSegment = segments[segments.length - 1];
-  return {
-    tripProgress: 1,
-    activeLegIndex: lastSegment.legIndex,
-    activeLegProgress: 1,
-    phase: lastSegment.kind,
-  };
+  return getFinalTimelineFrame(segments);
 }
 
 export function getTripProgressFromLegPosition(

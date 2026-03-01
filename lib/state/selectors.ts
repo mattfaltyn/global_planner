@@ -140,10 +140,12 @@ function getSegmentProgress(
     traversedMs = segmentEndMs;
   }
 
+  /* v8 ignore start -- defensive fallback; loop returns on the last segment above */
   return {
     segment: segments[segments.length - 1],
     progress: 1,
   };
+  /* v8 ignore stop */
 }
 
 function getPlaybackDateMetrics(
@@ -283,6 +285,7 @@ export function getTripProgressFromCalendarProgress(
       activeLegProgress: 0,
       phase: "travel",
     });
+    /* v8 ignore next -- defensive nullish fallback; candidate is non-null whenever this loop runs */
     const candidateProgress = candidate?.progressRatio ?? mid;
 
     best = mid;

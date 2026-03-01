@@ -88,20 +88,7 @@ function rebuildLegs(stops: ItineraryStop[], existingLegs: ItineraryLeg[]) {
 }
 
 function setLegMode(legs: ItineraryLeg[], legId: string, mode: TravelMode) {
-  return legs.map((leg) => {
-    if (leg.id !== legId) {
-      return leg;
-    }
-
-    return {
-      ...leg,
-      mode,
-      pathPoints: leg.pathPoints.map((point) => ({
-        ...point,
-        altitude: mode === "air" ? point.altitude || 0.04 : 0.002,
-      })),
-    };
-  });
+  return legs.map((leg) => (leg.id === legId ? { ...leg, mode } : leg));
 }
 
 function getStopIndex(stops: ItineraryStop[], stopId: string) {
@@ -307,6 +294,15 @@ export function appReducer(state: AppState, action: AppAction): AppState {
           legs,
           selectedInsertIndex: null,
         },
+        playback: {
+          ...state.playback,
+          activeLegIndex: Math.min(
+            state.playback.activeLegIndex,
+            Math.max(0, legs.length - 1)
+          ),
+          progress: legs.length === 0 ? 0 : state.playback.progress,
+          status: legs.length === 0 ? "idle" : state.playback.status,
+        },
       };
     }
     case "itinerary/move-stop-up": {
@@ -348,7 +344,10 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       };
     }
     case "itinerary/set-leg-mode": {
-      const legs = setLegMode(state.itinerary.legs, action.legId, action.mode);
+      const legs = rebuildLegs(
+        state.itinerary.stops,
+        setLegMode(state.itinerary.legs, action.legId, action.mode)
+      );
 
       return {
         ...state,

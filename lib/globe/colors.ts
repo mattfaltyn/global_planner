@@ -5,4 +5,13 @@ export const globeColors = {
   route: "rgba(108, 228, 255, 0.08)",
   routeHovered: "rgba(108, 228, 255, 0.42)",
   routeSelected: "rgba(255, 184, 112, 0.9)",
+  stop: "rgba(214, 241, 255, 0.8)",
+  stopVisited: "rgba(214, 241, 255, 0.34)",
+  stopSelected: "#ffd18f",
+  stopActive: "#fff4d2",
+  airLeg: "rgba(108, 228, 255, 0.48)",
+  airLegSelected: "rgba(108, 228, 255, 0.9)",
+  groundLeg: "rgba(255, 213, 155, 0.72)",
+  groundLegSelected: "rgba(255, 184, 112, 0.96)",
+  traveler: "#fff8dd",
 };

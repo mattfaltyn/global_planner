@@ -197,18 +197,11 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         },
       };
     case "itinerary/add-stop": {
-      const insertAfterIndex =
-        state.searchIntent.kind === "replace-anchor"
-          ? null
-          : state.itinerary.selectedInsertIndex ??
-            (state.selection?.kind === "stop"
-              ? getStopIndex(state.itinerary.stops, state.selection.stopId)
-              : state.itinerary.stops.length - 1);
-
       if (state.searchIntent.kind === "replace-anchor") {
+        const { stopId } = state.searchIntent;
         const stops = normalizeStopsForDates(
           state.itinerary.stops.map((stop) =>
-            stop.id === state.searchIntent.stopId
+            stop.id === stopId
               ? {
                   ...stop,
                   label: action.airport.city,
@@ -232,7 +225,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
             stops,
             legs: rebuildLegs(stops, state.itinerary.legs),
           },
-          selection: { kind: "stop", stopId: state.searchIntent.stopId },
+          selection: { kind: "stop", stopId },
         };
       }
 
@@ -240,8 +233,13 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         action.airport,
         state.itinerary.nextStopOrdinal
       );
+      const insertAfterIndex =
+        state.itinerary.selectedInsertIndex ??
+        (state.selection?.kind === "stop"
+          ? getStopIndex(state.itinerary.stops, state.selection.stopId)
+          : state.itinerary.stops.length - 1);
       const stops = [...state.itinerary.stops];
-      const insertAt = Math.min(stops.length, (insertAfterIndex ?? stops.length - 1) + 1);
+      const insertAt = Math.min(stops.length, insertAfterIndex + 1);
       stops.splice(insertAt, 0, newStop);
       const normalizedStops = normalizeStopsForDates(stops);
 
@@ -277,11 +275,14 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     case "itinerary/remove-stop": {
       const stops = state.itinerary.stops.filter((stop) => stop.id !== action.stopId);
       const legs = rebuildLegs(stops, state.itinerary.legs);
+      const selectedLegId =
+        state.selection && state.selection.kind === "leg"
+          ? state.selection.legId
+          : null;
       const nextSelection =
         state.selection?.kind === "stop" && state.selection.stopId === action.stopId
           ? null
-          : state.selection?.kind === "leg" &&
-              !legs.some((leg) => leg.id === state.selection?.legId)
+          : selectedLegId && !legs.some((leg) => leg.id === selectedLegId)
             ? null
             : state.selection;
 

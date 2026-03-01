@@ -16,7 +16,7 @@ const displayFont = localFont({
 
 export const metadata: Metadata = {
   title: "Global Planner",
-  description: "Interactive flight globe for major airports and direct routes.",
+  description: "Interactive itinerary globe with air and ground travel playback.",
 };
 
 export default function RootLayout({

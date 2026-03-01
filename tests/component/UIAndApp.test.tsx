@@ -9,12 +9,12 @@ import { GlobeLegend } from "../../components/globe/GlobeLegend";
 import { TestGlobeCanvas } from "../../components/globe/TestGlobeCanvas";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { ErrorState } from "../../components/ui/ErrorState";
+import { ItineraryPanel } from "../../components/ui/ItineraryPanel";
 import { LoadingOverlay } from "../../components/ui/LoadingOverlay";
 import { SearchBox } from "../../components/ui/SearchBox";
 import { SearchResults } from "../../components/ui/SearchResults";
-import { SidePanel } from "../../components/ui/SidePanel";
 import { Tooltip } from "../../components/ui/Tooltip";
-import { createFixtureDataset, fixtureAirports, fixtureRoutes } from "../fixtures/dataset";
+import { createResolvedFixtureItinerary, fixtureAirports } from "../fixtures/dataset";
 
 vi.mock("next/font/local", () => ({
   default: () => ({ variable: "mock-font" }),
@@ -43,188 +43,293 @@ describe("app shells and UI components", () => {
     expect(screen.getByTestId("globe-shell-page-mock")).toBeInTheDocument();
   });
 
-  it("renders static globe and panel helper components", async () => {
+  it("renders static globe and itinerary helper components", async () => {
     const user = userEvent.setup();
-    const dataset = createFixtureDataset();
+    const { stops, legs } = createResolvedFixtureItinerary();
     const onRetry = vi.fn();
+    const onSelectStop = vi.fn();
+    const onSelectLeg = vi.fn();
     const onClearSelection = vi.fn();
-    const onClose = vi.fn();
-    const onFilterChange = vi.fn();
-    const onSortChange = vi.fn();
-    const onSelectAirport = vi.fn();
-    const onSelectRoute = vi.fn();
 
     render(
       <>
-        <GlobeLegend manifest={dataset.manifest} />
-        <TestGlobeCanvas onClearSelection={onClearSelection} />
+        <GlobeLegend stops={stops} legs={legs} />
+        <TestGlobeCanvas
+          stops={stops}
+          legs={legs}
+          selection={null}
+          playback={{ status: "idle", activeLegIndex: 0, progress: 0 }}
+          onSelectStop={onSelectStop}
+          onSelectLeg={onSelectLeg}
+          onClearSelection={onClearSelection}
+        />
         <EmptyState />
         <ErrorState message="boom" onRetry={onRetry} />
         <LoadingOverlay />
         <Tooltip x={10} y={20} title="Title" lines={["A", "B"]} />
-        <SidePanel
-          airport={dataset.airports[0]}
-          route={null}
-          destinationItems={[
-            {
-              airport: dataset.airports[1],
-              route: dataset.routes[0],
-              distanceKm: dataset.routes[0].distanceKm,
-            },
-          ]}
-          panelFilterQuery=""
-          panelSortKey="name"
-          indexes={dataset.indexes}
-          isTouchDevice={false}
-          onClose={onClose}
-          onFilterChange={onFilterChange}
-          onSortChange={onSortChange}
-          onSelectAirport={onSelectAirport}
-          onSelectRoute={onSelectRoute}
-        />
       </>
     );
 
-    await user.click(screen.getByRole("button", { name: "E2E globe fallback" }));
+    await user.click(screen.getByRole("button", { name: "Vancouver" }));
+    await user.click(screen.getByRole("button", { name: "seed-stop-0__seed-stop-1" }));
+    await user.click(screen.getByRole("button", { name: "Clear selection" }));
     await user.click(screen.getByRole("button", { name: "Retry" }));
-    await user.click(screen.getByRole("button", { name: "Close" }));
-    fireEvent.change(screen.getByPlaceholderText("Filter destinations"), {
-      target: { value: "lon" },
-    });
-    await user.selectOptions(screen.getByRole("combobox"), "distance");
-    await user.click(screen.getByRole("button", { name: /heathrow airport/i }));
-    await user.click(screen.getByRole("button", { name: /5,540 km/i }));
 
-    expect(screen.getByText("Major-airport direct route globe")).toBeInTheDocument();
-    expect(screen.getByText("Pick a connection to inspect the network.")).toBeInTheDocument();
+    expect(screen.getByText("Travel itinerary")).toBeInTheDocument();
+    expect(screen.getByText("Build a route and press play.")).toBeInTheDocument();
+    expect(screen.getByText("Preparing the itinerary globe")).toBeInTheDocument();
     expect(screen.getByText("Title")).toBeInTheDocument();
+    expect(screen.getByTestId("test-globe-summary")).toHaveTextContent("9 stops");
+    expect(onSelectStop).toHaveBeenCalledWith("seed-stop-0");
+    expect(onSelectLeg).toHaveBeenCalledWith("seed-stop-0__seed-stop-1");
     expect(onClearSelection).toHaveBeenCalled();
     expect(onRetry).toHaveBeenCalled();
-    expect(onClose).toHaveBeenCalled();
-    expect(onFilterChange).toHaveBeenCalledWith("lon");
-    expect(onSortChange).toHaveBeenCalledWith("distance");
-    expect(onSelectAirport).toHaveBeenCalledWith("507");
-    expect(onSelectRoute).toHaveBeenCalledWith("3797__507", "3797");
   });
 
-  it("renders route mode side panel actions", async () => {
-    const user = userEvent.setup();
-    const dataset = createFixtureDataset();
-    const onSelectAirport = vi.fn();
+  it("renders the test globe selection summary when a selection exists", () => {
+    const { stops, legs } = createResolvedFixtureItinerary();
 
     render(
-      <SidePanel
-        airport={dataset.airports[0]}
-        route={dataset.routes[0]}
-        destinationItems={[]}
-        panelFilterQuery=""
-        panelSortKey="name"
-        indexes={dataset.indexes}
-        isTouchDevice
-        onClose={() => undefined}
-        onFilterChange={() => undefined}
-        onSortChange={() => undefined}
-        onSelectAirport={onSelectAirport}
-        onSelectRoute={() => undefined}
+      <TestGlobeCanvas
+        stops={stops}
+        legs={legs}
+        selection={{ kind: "leg", legId: legs[0].id }}
+        playback={{ status: "paused", activeLegIndex: 0, progress: 0.25 }}
+        onSelectStop={() => undefined}
+        onSelectLeg={() => undefined}
+        onClearSelection={() => undefined}
       />
     );
 
-    await user.click(screen.getByRole("button", { name: /jump to jfk/i }));
-    await user.click(screen.getByRole("button", { name: /jump to lhr/i }));
-
-    expect(screen.getByTestId("side-panel")).toHaveTextContent("Directionality");
-    expect(onSelectAirport).toHaveBeenNthCalledWith(1, "3797");
-    expect(onSelectAirport).toHaveBeenNthCalledWith(2, "507");
+    expect(screen.getByTestId("test-globe-selection")).toHaveTextContent(
+      JSON.stringify({ kind: "leg", legId: legs[0].id })
+    );
   });
 
-  it("covers SearchResults code fallback and empty SidePanel content", () => {
+  it("renders and interacts with the itinerary panel", async () => {
+    const user = userEvent.setup();
+    const { stops, legs } = createResolvedFixtureItinerary();
+    const onClose = vi.fn();
+    const onSelectStop = vi.fn();
+    const onMoveStopUp = vi.fn();
+    const onMoveStopDown = vi.fn();
+    const onRemoveStop = vi.fn();
+    const onInsertAfter = vi.fn();
+    const onUpdateStop = vi.fn();
+    const onReplaceAnchor = vi.fn();
+    const onSetLegMode = vi.fn();
+    const onPlay = vi.fn();
+    const onPause = vi.fn();
+    const onReset = vi.fn();
+    const onStepPrev = vi.fn();
+    const onStepNext = vi.fn();
+    const onSpeedChange = vi.fn();
+    const onProgressChange = vi.fn();
+    const onPlayLeg = vi.fn();
+
     render(
-      <>
-        <SearchResults
-          results={[
-            {
-              ...fixtureAirports[0],
-              iata: null,
-              icao: null,
-            },
-          ]}
-          activeIndex={0}
-          onSelect={() => undefined}
-        />
-        <SidePanel
-          airport={null}
-          route={null}
-          destinationItems={[]}
-          panelFilterQuery=""
-          panelSortKey="name"
-          indexes={createFixtureDataset().indexes}
-          isTouchDevice={false}
-          onClose={() => undefined}
-          onFilterChange={() => undefined}
-          onSortChange={() => undefined}
-          onSelectAirport={() => undefined}
-          onSelectRoute={() => undefined}
-        />
-        <SidePanel
-          airport={{
-            ...fixtureAirports[0],
-            iata: null,
-            icao: null,
-            tzName: null,
-          }}
-          route={null}
-          destinationItems={[]}
-          panelFilterQuery=""
-          panelSortKey="name"
-          indexes={createFixtureDataset().indexes}
-          isTouchDevice={false}
-          onClose={() => undefined}
-          onFilterChange={() => undefined}
-          onSortChange={() => undefined}
-          onSelectAirport={() => undefined}
-          onSelectRoute={() => undefined}
-        />
-        <SidePanel
-          airport={createFixtureDataset().airports[0]}
-          route={{
-            ...fixtureRoutes[0],
-          }}
-          destinationItems={[]}
-          panelFilterQuery=""
-          panelSortKey="name"
-          indexes={{
-            ...createFixtureDataset().indexes,
-            airportsById: new Map([
-              [
-                "3797",
-                {
-                  ...fixtureAirports[0],
-                  iata: null,
-                },
-              ],
-              [
-                "507",
-                {
-                  ...fixtureAirports[1],
-                  iata: null,
-                },
-              ],
-            ]),
-          }}
-          isTouchDevice={false}
-          onClose={() => undefined}
-          onFilterChange={() => undefined}
-          onSortChange={() => undefined}
-          onSelectAirport={() => undefined}
-          onSelectRoute={() => undefined}
-        />
-      </>
+      <ItineraryPanel
+        stops={stops}
+        legs={legs}
+        selection={{ kind: "leg", legId: legs[4].id }}
+        playback={{
+          status: "playing",
+          activeLegIndex: 4,
+          progress: 0.5,
+          speed: 1,
+          dwellRemainingMs: 0,
+        }}
+        isTouchDevice
+        onClose={onClose}
+        onSelectStop={onSelectStop}
+        onMoveStopUp={onMoveStopUp}
+        onMoveStopDown={onMoveStopDown}
+        onRemoveStop={onRemoveStop}
+        onInsertAfter={onInsertAfter}
+        onUpdateStop={onUpdateStop}
+        onReplaceAnchor={onReplaceAnchor}
+        onSetLegMode={onSetLegMode}
+        onPlay={onPlay}
+        onPause={onPause}
+        onReset={onReset}
+        onStepPrev={onStepPrev}
+        onStepNext={onStepNext}
+        onSpeedChange={onSpeedChange}
+        onProgressChange={onProgressChange}
+        onPlayLeg={onPlayLeg}
+      />
     );
 
-    expect(screen.getByText("N/A")).toBeInTheDocument();
-    expect(screen.getAllByText("Unavailable").length).toBeGreaterThan(0);
-    expect(screen.getAllByTestId("side-panel")).toHaveLength(3);
-    expect(screen.getAllByText(/Jump to/)[0]).toHaveTextContent("Jump to John F Kennedy International Airport");
+    await user.click(screen.getByRole("button", { name: "Close" }));
+    await user.click(screen.getByRole("button", { name: "Pause" }));
+    await user.click(screen.getByRole("button", { name: "Reset" }));
+    await user.click(screen.getByRole("button", { name: "Previous" }));
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    await user.selectOptions(screen.getByLabelText("Playback speed"), "2");
+    fireEvent.change(screen.getByLabelText(/Progress:/), { target: { value: "25" } });
+    await user.click(screen.getByRole("button", { name: /1. Vancouver/i }));
+    await user.click(screen.getAllByRole("button", { name: "Up" })[0]);
+    await user.click(screen.getAllByRole("button", { name: "Down" })[0]);
+    await user.click(screen.getAllByRole("button", { name: "Remove" })[0]);
+    await user.click(screen.getAllByRole("button", { name: "Insert after" })[0]);
+    await user.click(screen.getByRole("button", { name: "Air" }));
+    await user.click(screen.getByRole("button", { name: "Ground" }));
+    await user.click(screen.getByRole("button", { name: "Play this leg" }));
+
+    expect(screen.getByTestId("itinerary-panel").className).toMatch(/mobilePanel/);
+    expect(screen.getByText("Summary")).toBeInTheDocument();
+    expect(screen.getByText(/Feb 20, 2026 to Apr 10, 2026/)).toBeInTheDocument();
+    expect(screen.getByText(/Active leg: Lisbon to Barcelona/)).toBeInTheDocument();
+    expect(onClose).toHaveBeenCalled();
+    expect(onPause).toHaveBeenCalled();
+    expect(onReset).toHaveBeenCalled();
+    expect(onStepPrev).toHaveBeenCalled();
+    expect(onStepNext).toHaveBeenCalled();
+    expect(onSpeedChange).toHaveBeenCalledWith(2);
+    expect(onProgressChange).toHaveBeenCalledWith(0.25);
+    expect(onSelectStop).toHaveBeenCalledWith("seed-stop-0");
+    expect(onMoveStopUp).toHaveBeenCalledWith("seed-stop-0");
+    expect(onMoveStopDown).toHaveBeenCalledWith("seed-stop-0");
+    expect(onRemoveStop).toHaveBeenCalledWith("seed-stop-0");
+    expect(onInsertAfter).toHaveBeenCalledWith(0, "seed-stop-0");
+    expect(onSetLegMode).toHaveBeenNthCalledWith(1, legs[4].id, "air");
+    expect(onSetLegMode).toHaveBeenNthCalledWith(2, legs[4].id, "ground");
+    expect(onPlayLeg).toHaveBeenCalledWith(legs[4].id);
+  });
+
+  it("renders the stop editor and playback idle state", async () => {
+    const user = userEvent.setup();
+    const { stops, legs } = createResolvedFixtureItinerary();
+    const unresolvedStop = {
+      ...stops[1],
+      unresolved: true,
+      anchorAirportId: null,
+    };
+    const onUpdateStop = vi.fn();
+    const onReplaceAnchor = vi.fn();
+    const onPlay = vi.fn();
+
+    render(
+      <ItineraryPanel
+        stops={[stops[0], unresolvedStop]}
+        legs={legs.slice(0, 1)}
+        selection={{ kind: "stop", stopId: unresolvedStop.id }}
+        playback={{
+          status: "idle",
+          activeLegIndex: 0,
+          progress: 0,
+          speed: 1,
+          dwellRemainingMs: 0,
+        }}
+        isTouchDevice={false}
+        onClose={() => undefined}
+        onSelectStop={() => undefined}
+        onMoveStopUp={() => undefined}
+        onMoveStopDown={() => undefined}
+        onRemoveStop={() => undefined}
+        onInsertAfter={() => undefined}
+        onUpdateStop={onUpdateStop}
+        onReplaceAnchor={onReplaceAnchor}
+        onSetLegMode={() => undefined}
+        onPlay={onPlay}
+        onPause={() => undefined}
+        onReset={() => undefined}
+        onStepPrev={() => undefined}
+        onStepNext={() => undefined}
+        onSpeedChange={() => undefined}
+        onProgressChange={() => undefined}
+        onPlayLeg={() => undefined}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Play" }));
+    fireEvent.change(screen.getByLabelText("Label"), { target: { value: "Porto Base" } });
+    fireEvent.change(screen.getByLabelText("Arrival date"), {
+      target: { value: "2026-02-22" },
+    });
+    fireEvent.change(screen.getByLabelText("Departure date"), {
+      target: { value: "2026-03-03" },
+    });
+    fireEvent.change(screen.getByLabelText("Arrival date"), {
+      target: { value: "" },
+    });
+    fireEvent.change(screen.getByLabelText("Departure date"), {
+      target: { value: "" },
+    });
+    fireEvent.change(screen.getByLabelText("Notes"), {
+      target: { value: "Walkable city" },
+    });
+    await user.click(screen.getByRole("button", { name: "Replace anchor with search" }));
+
+    expect(screen.getByText("This stop is unresolved. Use search to replace its anchor airport.")).toBeInTheDocument();
+    expect(screen.getByText("Unresolved")).toBeInTheDocument();
+    expect(onPlay).toHaveBeenCalled();
+    expect(onUpdateStop).toHaveBeenNthCalledWith(1, unresolvedStop.id, { label: "Porto Base" });
+    expect(onUpdateStop).toHaveBeenNthCalledWith(2, unresolvedStop.id, {
+      arrivalDate: "2026-02-22",
+    });
+    expect(onUpdateStop).toHaveBeenNthCalledWith(3, unresolvedStop.id, {
+      departureDate: "2026-03-03",
+    });
+    expect(onUpdateStop).toHaveBeenNthCalledWith(4, unresolvedStop.id, {
+      arrivalDate: null,
+    });
+    expect(onUpdateStop).toHaveBeenNthCalledWith(5, unresolvedStop.id, {
+      departureDate: null,
+    });
+    expect(onUpdateStop).toHaveBeenNthCalledWith(6, unresolvedStop.id, {
+      notes: "Walkable city",
+    });
+    expect(onReplaceAnchor).toHaveBeenCalledWith(unresolvedStop.id);
+  });
+
+  it("renders fallback labels and unknown leg distance when stop data is missing", () => {
+    const missingLeg = {
+      id: "missing-from__missing-to",
+      fromStopId: "missing-from",
+      toStopId: "missing-to",
+      mode: "ground" as const,
+      distanceKm: null,
+      pathPoints: [],
+    };
+
+    render(
+      <ItineraryPanel
+        stops={[]}
+        legs={[missingLeg]}
+        selection={{ kind: "leg", legId: missingLeg.id }}
+        playback={{
+          status: "paused",
+          activeLegIndex: 0,
+          progress: 0.5,
+          speed: 1,
+          dwellRemainingMs: 0,
+        }}
+        isTouchDevice={false}
+        onClose={() => undefined}
+        onSelectStop={() => undefined}
+        onMoveStopUp={() => undefined}
+        onMoveStopDown={() => undefined}
+        onRemoveStop={() => undefined}
+        onInsertAfter={() => undefined}
+        onUpdateStop={() => undefined}
+        onReplaceAnchor={() => undefined}
+        onSetLegMode={() => undefined}
+        onPlay={() => undefined}
+        onPause={() => undefined}
+        onReset={() => undefined}
+        onStepPrev={() => undefined}
+        onStepNext={() => undefined}
+        onSpeedChange={() => undefined}
+        onProgressChange={() => undefined}
+        onPlayLeg={() => undefined}
+      />
+    );
+
+    expect(screen.getByText("Dates unavailable")).toBeInTheDocument();
+    expect(screen.getByText(/Active leg: missing-from to missing-to/)).toBeInTheDocument();
+    expect(screen.getAllByText(/missing-from to missing-to/)).toHaveLength(2);
+    expect(screen.getByText("Unknown distance")).toBeInTheDocument();
   });
 
   it("handles search box keyboard navigation and result selection", async () => {
@@ -234,7 +339,7 @@ describe("app shells and UI components", () => {
 
     const { rerender } = render(
       <SearchBox
-        query="J"
+        query="V"
         results={fixtureAirports.map((airport) => ({ ...airport }))}
         onQueryChange={onQueryChange}
         onSelect={onSelect}
@@ -242,11 +347,11 @@ describe("app shells and UI components", () => {
     );
 
     const input = screen.getByLabelText("Search airports");
-    await user.type(input, "F");
+    await user.type(input, "A");
     await user.keyboard("{ArrowDown}{ArrowUp}{Enter}{Escape}");
 
     expect(onQueryChange).toHaveBeenCalled();
-    expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: "3797" }));
+    expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: "1" }));
     expect(screen.getByRole("listbox")).toBeInTheDocument();
 
     rerender(
@@ -261,13 +366,21 @@ describe("app shells and UI components", () => {
     expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
   });
 
-  it("renders search results active and inactive states", async () => {
+  it("renders search results active and fallback states", async () => {
     const user = userEvent.setup();
     const onSelect = vi.fn();
 
     render(
       <SearchResults
-        results={fixtureAirports.map((airport) => ({ ...airport }))}
+        results={[
+          ...fixtureAirports.map((airport) => ({ ...airport })),
+          {
+            ...fixtureAirports[0],
+            id: "fallback",
+            iata: null,
+            icao: null,
+          },
+        ]}
         activeIndex={1}
         onSelect={onSelect}
       />
@@ -278,6 +391,7 @@ describe("app shells and UI components", () => {
 
     expect(buttons[1].className).toMatch(/active/);
     expect(buttons[0].className).toMatch(/item/);
-    expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: "3797" }));
+    expect(screen.getByText("N/A")).toBeInTheDocument();
+    expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: "1" }));
   });
 });

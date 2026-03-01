@@ -1,6 +1,7 @@
 import React from "react";
 import {
   act,
+  fireEvent,
   render,
   screen,
   waitFor,
@@ -13,31 +14,35 @@ import { createFixtureDataset } from "../fixtures/dataset";
 let globeProps: Record<string, (...args: unknown[]) => void> | null = null;
 
 vi.mock("next/dynamic", () => ({
-  default: () => function MockDynamicComponent(props: Record<string, (...args: unknown[]) => void>) {
-    globeProps = props;
-    return (
-      <div data-testid="globe-canvas-mock">
-        <button type="button" onClick={() => props.onHoverAirport?.("3797", 12, 24)}>
-          hover-airport
-        </button>
-        <button type="button" onClick={() => props.onHoverRoute?.("3797__507", 18, 30)}>
-          hover-route
-        </button>
-        <button type="button" onClick={() => props.onClearHover?.()}>
-          clear-hover
-        </button>
-        <button type="button" onClick={() => props.onSelectAirport?.("3797")}>
-          select-airport
-        </button>
-        <button type="button" onClick={() => props.onSelectRoute?.("3797__507", "3797")}>
-          select-route
-        </button>
-        <button type="button" onClick={() => props.onClearSelection?.()}>
-          clear-selection
-        </button>
-      </div>
-    );
-  },
+  default: () =>
+    function MockDynamicComponent(props: Record<string, (...args: unknown[]) => void>) {
+      globeProps = props;
+      return (
+        <div data-testid="globe-canvas-mock">
+          <button type="button" onClick={() => props.onHoverStop?.("seed-stop-0", 12, 24)}>
+            hover-stop
+          </button>
+          <button
+            type="button"
+            onClick={() => props.onHoverLeg?.("seed-stop-4__seed-stop-5", 18, 30)}
+          >
+            hover-leg
+          </button>
+          <button type="button" onClick={() => props.onClearHover?.()}>
+            clear-hover
+          </button>
+          <button type="button" onClick={() => props.onSelectStop?.("seed-stop-1")}>
+            select-stop
+          </button>
+          <button type="button" onClick={() => props.onSelectLeg?.("seed-stop-4__seed-stop-5")}>
+            select-leg
+          </button>
+          <button type="button" onClick={() => props.onClearSelection?.()}>
+            clear-selection
+          </button>
+        </div>
+      );
+    },
 }));
 
 vi.mock("../../lib/data/loadDataset", () => ({
@@ -46,7 +51,6 @@ vi.mock("../../lib/data/loadDataset", () => ({
 
 import { loadDataset } from "../../lib/data/loadDataset";
 import { getHoverContent, GlobeShell } from "../../components/globe/GlobeShell";
-import { SidePanel } from "../../components/ui/SidePanel";
 
 describe("GlobeShell", () => {
   beforeEach(() => {
@@ -56,47 +60,60 @@ describe("GlobeShell", () => {
     vi.mocked(loadDataset).mockResolvedValue(createFixtureDataset());
   });
 
-  it("shows a loading state and then renders the dataset", async () => {
+  it("shows the loading state and then renders the seeded itinerary", async () => {
     render(<GlobeShell />);
 
     expect(screen.getByTestId("loading-overlay")).toBeInTheDocument();
     await waitFor(() => {
-      expect(screen.getByTestId("dataset-status")).toHaveTextContent("Loaded 3 airports and 2 routes");
+      expect(screen.getByTestId("dataset-status")).toHaveTextContent("Loaded 9 airports and 7 routes");
+    });
+    await waitFor(() => {
+      expect(screen.getByText(/9 total/)).toBeInTheDocument();
     });
 
-    expect(screen.getByTestId("dataset-status")).toHaveTextContent("Loaded 3 airports and 2 routes");
     expect(screen.getByTestId("globe-canvas-mock")).toBeInTheDocument();
+    expect(screen.getByTestId("itinerary-panel")).toHaveTextContent("Travel itinerary");
+    expect(screen.getAllByText("Lisbon, Portugal")).toHaveLength(2);
   });
 
-  it("searches and selects an airport, updating the URL", async () => {
+  it("adds a stop from search and clears the query", async () => {
     const user = userEvent.setup();
     render(<GlobeShell />);
 
-    await waitFor(() => {
-      expect(screen.getByTestId("dataset-status")).toHaveTextContent("Loaded 3 airports and 2 routes");
-    });
-    await user.type(screen.getByLabelText("Search airports"), "JFK");
-    await user.click(screen.getByRole("button", { name: /john f kennedy international airport/i }));
+    await waitForElementToBeRemoved(() => screen.getByTestId("loading-overlay"));
+    await user.type(screen.getByLabelText("Search airports"), "MAD");
+    await user.click(
+      screen.getByRole("button", {
+        name: /adolfo suarez madrid-barajas airport/i,
+      })
+    );
 
     await waitFor(() => {
-      expect(window.location.search).toContain("airport=3797");
+      expect(screen.getByText("10 total")).toBeInTheDocument();
     });
 
-    expect(screen.getByTestId("side-panel")).toHaveTextContent("John F Kennedy International Airport");
+    expect(screen.getByLabelText("Search airports")).toHaveValue("");
   });
 
-  it("hydrates route detail from URL params", async () => {
-    window.history.replaceState({}, "", "/?airport=3797&route=3797__507");
-    render(<GlobeShell />);
+  it("hydrates selected stop and leg from the URL", async () => {
+    window.history.replaceState({}, "", "/?stop=seed-stop-1");
+    const view = render(<GlobeShell />);
 
+    await waitForElementToBeRemoved(() => screen.getByTestId("loading-overlay"));
     await waitFor(() => {
-      expect(screen.getByTestId("dataset-status")).toHaveTextContent("Loaded 3 airports and 2 routes");
+      expect(screen.getByDisplayValue("Porto")).toBeInTheDocument();
+      expect(window.location.search).toBe("?stop=seed-stop-1");
     });
 
+    view.unmount();
+    window.history.replaceState({}, "", "/?leg=seed-stop-4__seed-stop-5");
+    render(<GlobeShell />);
+
+    await waitForElementToBeRemoved(() => screen.getByTestId("loading-overlay"));
     await waitFor(() => {
-      expect(screen.getByTestId("side-panel")).toHaveTextContent("Route detail");
-      expect(screen.getByTestId("side-panel")).toHaveTextContent("Heathrow Airport");
-      expect(window.location.search).toBe("?airport=3797&route=3797__507");
+      expect(screen.getByText("Leg editor")).toBeInTheDocument();
+      expect(screen.getByText(/Lisbon to Barcelona/i)).toBeInTheDocument();
+      expect(window.location.search).toBe("?leg=seed-stop-4__seed-stop-5");
     });
   });
 
@@ -104,105 +121,132 @@ describe("GlobeShell", () => {
     render(<GlobeShell />);
 
     await waitForElementToBeRemoved(() => screen.getByTestId("loading-overlay"));
-    await act(async () => {
-      await Promise.resolve();
+    await userEvent.setup().click(screen.getByRole("button", { name: "select-stop" }));
+    await waitFor(() => {
+      expect(window.location.search).toBe("?stop=seed-stop-1");
     });
 
     await act(async () => {
-      window.history.replaceState({}, "", "/?airport=507");
+      window.history.pushState({}, "", "/?stop=seed-stop-5");
       window.dispatchEvent(new PopStateEvent("popstate"));
     });
 
     await waitFor(() => {
-      expect(screen.getByTestId("side-panel")).toHaveTextContent("Heathrow Airport");
+      expect(screen.getByDisplayValue("Barcelona")).toBeInTheDocument();
     });
   });
 
-  it("handles hover, panel callbacks, and clear selection", async () => {
+  it("updates selection from playback side effects and final-leg completion", async () => {
+    process.env.NEXT_PUBLIC_E2E = "1";
+    const user = userEvent.setup();
+    render(<GlobeShell />);
+
+    await waitForElementToBeRemoved(() => screen.getByTestId("loading-overlay"));
+    await waitFor(() => {
+      expect(window.__GLOBAL_PLANNER_TEST_API__).toBeDefined();
+    });
+
+    await user.click(screen.getByRole("button", { name: "Play" }));
+    await waitFor(() => {
+      expect(screen.getByText("Leg editor")).toBeInTheDocument();
+      expect(window.location.search).toBe("?leg=seed-stop-0__seed-stop-1");
+    });
+
+    await act(async () => {
+      window.__GLOBAL_PLANNER_TEST_API__?.selectLeg("seed-stop-7__seed-stop-8");
+    });
+    fireEvent.change(screen.getByLabelText(/Progress:/), { target: { value: "100" } });
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue("Madrid")).toBeInTheDocument();
+      expect(window.location.search).toBe("?stop=seed-stop-8");
+    });
+  });
+
+  it("handles hover, selection, close, and playback interactions", async () => {
     const user = userEvent.setup();
     render(<GlobeShell />);
 
     await waitForElementToBeRemoved(() => screen.getByTestId("loading-overlay"));
 
-    await user.click(screen.getByRole("button", { name: "hover-airport" }));
-    expect(screen.getByRole("status")).toHaveTextContent("John F Kennedy International Airport");
+    await user.click(screen.getByRole("button", { name: "hover-stop" }));
+    expect(screen.getByRole("status")).toHaveTextContent("Vancouver");
 
-    await user.click(screen.getByRole("button", { name: "hover-route" }));
-    expect(screen.getByRole("status")).toHaveTextContent("Heathrow Airport");
+    await user.click(screen.getByRole("button", { name: "hover-leg" }));
+    expect(screen.getByRole("status")).toHaveTextContent("Lisbon -> Barcelona");
 
     await user.click(screen.getByRole("button", { name: "clear-hover" }));
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "select-airport" }));
-    expect(screen.getByTestId("side-panel")).toHaveTextContent(
-      "John F Kennedy International Airport"
-    );
+    await user.click(screen.getByRole("button", { name: "select-stop" }));
+    expect(screen.getByDisplayValue("Porto")).toBeInTheDocument();
 
-    await user.clear(screen.getByPlaceholderText("Filter destinations"));
-    await user.type(screen.getByPlaceholderText("Filter destinations"), "lon");
-    await user.selectOptions(screen.getByRole("combobox"), "distance");
+    await user.click(screen.getByRole("button", { name: "select-leg" }));
+    expect(screen.getByText("Leg editor")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /heathrow airport/i }));
-    expect(screen.getByTestId("side-panel")).toHaveTextContent("Heathrow Airport");
-
-    await user.click(screen.getByRole("button", { name: "select-airport" }));
-    await user.click(screen.getByRole("button", { name: /5,540 km/i }));
-    expect(screen.getByTestId("side-panel")).toHaveTextContent("Route detail");
-
+    await user.click(screen.getByRole("button", { name: "Play" }));
+    await user.click(screen.getByRole("button", { name: "Reset" }));
+    await user.click(screen.getByRole("button", { name: "Previous" }));
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    await user.selectOptions(screen.getByLabelText("Playback speed"), "2");
+    fireEvent.change(screen.getByLabelText(/Progress:/), { target: { value: "20" } });
+    await user.click(screen.getByRole("button", { name: "Ground" }));
+    expect(screen.getByTestId("selected-leg-mode")).toHaveTextContent("ground");
+    await user.click(screen.getByRole("button", { name: "Play this leg" }));
+    expect(screen.getByRole("button", { name: "Pause" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Pause" }));
+    await user.click(screen.getByRole("button", { name: "select-stop" }));
+    await user.click(screen.getByRole("button", { name: "Replace anchor with search" }));
+    expect(screen.getByPlaceholderText("Replace anchor with a city or airport")).toBeInTheDocument();
+    await user.type(screen.getByLabelText("Search airports"), "FAO");
+    await user.click(screen.getByRole("button", { name: /faro airport/i }));
+    await user.click(screen.getByRole("button", { name: /1. Vancouver/i }));
+    await user.click(screen.getAllByRole("button", { name: "Up" })[0]);
+    await user.click(screen.getAllByRole("button", { name: "Down" })[0]);
+    await user.click(screen.getAllByRole("button", { name: "Insert after" })[0]);
+    fireEvent.change(screen.getByLabelText("Label"), { target: { value: "Vancouver Hub" } });
+    await user.click(screen.getAllByRole("button", { name: "Remove" })[1]);
     await user.click(screen.getByRole("button", { name: "Close" }));
-    expect(screen.getByText("Pick a connection to inspect the network.")).toBeInTheDocument();
+
+    expect(screen.getByText("This is your itinerary.")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "clear-selection" }));
-    expect(screen.getByText("Pick a connection to inspect the network.")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "select-route" }));
-    expect(screen.getByTestId("side-panel")).toHaveTextContent("Route detail");
+    expect(screen.getByText("This is your itinerary.")).toBeInTheDocument();
   });
 
-  it("registers the E2E test api when enabled", async () => {
+  it("registers the E2E test API when enabled", async () => {
     process.env.NEXT_PUBLIC_E2E = "1";
     const view = render(<GlobeShell />);
 
     await waitFor(() => {
       expect(window.__GLOBAL_PLANNER_TEST_API__).toBeDefined();
     });
-
     await waitFor(() => {
-      expect(screen.getByTestId("dataset-status")).toHaveTextContent("Loaded 3 airports and 2 routes");
+      expect(screen.getByTestId("dataset-status")).toHaveTextContent("Loaded 9 airports and 7 routes");
     });
-
-    expect(window.__GLOBAL_PLANNER_TEST_API__).toBeDefined();
+    await act(async () => {
+      await Promise.resolve();
+    });
 
     await act(async () => {
-      window.__GLOBAL_PLANNER_TEST_API__?.selectRoute("3797__507");
-      window.__GLOBAL_PLANNER_TEST_API__?.selectRoute("missing");
-      window.__GLOBAL_PLANNER_TEST_API__?.selectAirport("507");
+      window.__GLOBAL_PLANNER_TEST_API__?.selectLeg("seed-stop-4__seed-stop-5");
+      window.__GLOBAL_PLANNER_TEST_API__?.selectLeg("missing");
+      window.__GLOBAL_PLANNER_TEST_API__?.selectStop("seed-stop-1");
+      window.__GLOBAL_PLANNER_TEST_API__?.selectStop("missing");
     });
 
-    expect(window.__GLOBAL_PLANNER_TEST_API__?.getState().selection).toBe("?airport=507");
-    expect(screen.getByTestId("side-panel")).toHaveTextContent("Heathrow Airport");
+    await waitFor(() => {
+      expect(window.__GLOBAL_PLANNER_TEST_API__?.getState()).toEqual({
+        selection: "?stop=seed-stop-1",
+        stopCount: 9,
+        legCount: 8,
+        playbackStatus: "paused",
+      });
+      expect(screen.getByDisplayValue("Porto")).toBeInTheDocument();
+    });
 
     view.unmount();
     expect(window.__GLOBAL_PLANNER_TEST_API__).toBeUndefined();
-  });
-
-  it("ignores e2e route selection before the dataset is ready", async () => {
-    process.env.NEXT_PUBLIC_E2E = "1";
-    vi.mocked(loadDataset).mockImplementationOnce(
-      () => new Promise(() => undefined)
-    );
-    const view = render(<GlobeShell />);
-
-    await waitFor(() => {
-      expect(window.__GLOBAL_PLANNER_TEST_API__).toBeDefined();
-    });
-
-    await act(async () => {
-      window.__GLOBAL_PLANNER_TEST_API__?.selectRoute("3797__507");
-    });
-
-    expect(window.__GLOBAL_PLANNER_TEST_API__?.getState().selection).toBe("");
-    view.unmount();
   });
 
   it("renders the load error state and retries", async () => {
@@ -225,59 +269,133 @@ describe("GlobeShell", () => {
     expect(reload).toHaveBeenCalled();
   });
 
-  it("uses the ICAO code when airport hover lacks an IATA code", () => {
+  it("builds hover content for stops and legs and handles missing data", () => {
     const dataset = createFixtureDataset();
-    dataset.indexes.airportsById.set("3797", {
-      ...dataset.airports[0],
-      iata: null,
-      icao: "KJFK",
+    const stops = [
+      {
+        id: "seed-stop-0",
+        kind: "origin" as const,
+        label: "Vancouver",
+        city: "Vancouver",
+        country: "Canada",
+        anchorAirportId: "1",
+        lat: 49.1947,
+        lon: -123.1792,
+        arrivalDate: null,
+        departureDate: "2026-02-20",
+        dayCount: null,
+        notes: "",
+        unresolved: false,
+      },
+      {
+        id: "seed-stop-1",
+        kind: "stay" as const,
+        label: "Porto",
+        city: "Porto",
+        country: "Portugal",
+        anchorAirportId: "2",
+        lat: 41.2481,
+        lon: -8.6814,
+        arrivalDate: "2026-02-21",
+        departureDate: "2026-03-02",
+        dayCount: 9,
+        notes: "",
+        unresolved: false,
+      },
+      {
+        id: "seed-stop-2",
+        kind: "stay" as const,
+        label: "Unresolved Porto",
+        city: "Porto",
+        country: "Portugal",
+        anchorAirportId: null,
+        lat: null,
+        lon: null,
+        arrivalDate: "2026-03-03",
+        departureDate: "2026-03-04",
+        dayCount: 1,
+        notes: "",
+        unresolved: true,
+      },
+    ];
+    const legs = [
+      {
+        id: "seed-stop-0__seed-stop-1",
+        fromStopId: "seed-stop-0",
+        toStopId: "seed-stop-1",
+        mode: "air" as const,
+        distanceKm: dataset.routes[0].distanceKm,
+        pathPoints: [
+          { lat: 49.1947, lon: -123.1792, altitude: 0.04 },
+          { lat: 41.2481, lon: -8.6814, altitude: 0.18 },
+        ],
+      },
+      {
+        id: "seed-stop-1__seed-stop-2",
+        fromStopId: "seed-stop-1",
+        toStopId: "seed-stop-2",
+        mode: "ground" as const,
+        distanceKm: null,
+        pathPoints: [
+          { lat: 41.2481, lon: -8.6814, altitude: 0.002 },
+          { lat: 41.25, lon: -8.69, altitude: 0.002 },
+        ],
+      },
+    ];
+
+    expect(
+      getHoverContent({ kind: "stop", stopId: "seed-stop-0", x: 10, y: 20 }, stops, legs)
+    ).toEqual({
+      x: 10,
+      y: 20,
+      title: "Vancouver",
+      lines: ["Vancouver, Canada", "Unscheduled -> Feb 20, 2026", "Origin stop"],
     });
-
-    const hoverContent = getHoverContent(
-      { kind: "airport", airportId: "3797", x: 10, y: 20 },
-      dataset
-    );
-
-    expect(hoverContent?.lines[1]).toBe("KJFK");
-  });
-
-  it("shows an unavailable code label when hover airport has no codes", () => {
-    const dataset = createFixtureDataset();
-    dataset.indexes.airportsById.set("3797", {
-      ...dataset.airports[0],
-      iata: null,
-      icao: null,
+    expect(
+      getHoverContent({ kind: "stop", stopId: "seed-stop-2", x: 5, y: 6 }, stops, legs)
+    ).toEqual({
+      x: 5,
+      y: 6,
+      title: "Unresolved Porto",
+      lines: ["Porto, Portugal", "Mar 3, 2026 -> Mar 4, 2026", "Anchor unresolved"],
     });
-
-    const hoverContent = getHoverContent(
-      { kind: "airport", airportId: "3797", x: 10, y: 20 },
-      dataset
-    );
-
-    expect(hoverContent?.lines[1]).toBe("Code unavailable");
-  });
-});
-
-describe("SidePanel mobile rendering", () => {
-  it("switches to the mobile panel class for touch devices", () => {
-    const dataset = createFixtureDataset();
-    render(
-      <SidePanel
-        airport={dataset.airports[0]}
-        route={null}
-        destinationItems={[]}
-        panelFilterQuery=""
-        panelSortKey="name"
-        indexes={dataset.indexes}
-        isTouchDevice
-        onClose={() => undefined}
-        onFilterChange={() => undefined}
-        onSortChange={() => undefined}
-        onSelectAirport={() => undefined}
-        onSelectRoute={() => undefined}
-      />
-    );
-
-    expect(screen.getByTestId("side-panel").className).toMatch(/mobilePanel/);
+    expect(
+      getHoverContent({ kind: "stop", stopId: "seed-stop-1", x: 7, y: 8 }, stops, legs)
+    ).toEqual({
+      x: 7,
+      y: 8,
+      title: "Porto",
+      lines: ["Porto, Portugal", "Feb 21, 2026 -> Mar 2, 2026", "9 days"],
+    });
+    expect(
+      getHoverContent({ kind: "leg", legId: "seed-stop-0__seed-stop-1", x: 1, y: 2 }, stops, legs)
+    ).toEqual({
+      x: 1,
+      y: 2,
+      title: "Vancouver -> Porto",
+      lines: ["Air leg", "7,490 km", "Vancouver, Canada to Porto, Portugal"],
+    });
+    expect(
+      getHoverContent({ kind: "leg", legId: "seed-stop-1__seed-stop-2", x: 3, y: 4 }, stops, legs)
+    ).toEqual({
+      x: 3,
+      y: 4,
+      title: "Porto -> Unresolved Porto",
+      lines: ["Ground leg", "Distance unavailable", "Porto, Portugal to Porto, Portugal"],
+    });
+    expect(getHoverContent(null, stops, legs)).toBeNull();
+    expect(
+      getHoverContent({ kind: "stop", stopId: "missing", x: 0, y: 0 }, stops, legs)
+    ).toBeNull();
+    expect(
+      getHoverContent({ kind: "leg", legId: "missing", x: 0, y: 0 }, stops, legs)
+    ).toBeNull();
+    expect(
+      getHoverContent(
+        { kind: "leg", legId: "seed-stop-0__seed-stop-1", x: 0, y: 0 },
+        [stops[0]],
+        legs
+      )
+    ).toBeNull();
   });
 });

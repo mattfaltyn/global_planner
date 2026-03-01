@@ -5,9 +5,9 @@ export function LoadingOverlay() {
     <div className={styles.overlay} data-testid="loading-overlay">
       <div className={styles.card}>
         <p className={styles.kicker}>Loading dataset</p>
-        <h2>Preparing the major-airport network</h2>
+        <h2>Preparing the itinerary globe</h2>
         <p>
-          Airports, direct routes, and indexes are being loaded into the browser.
+          Airports, borders, and itinerary anchors are being loaded into the browser.
         </p>
       </div>
     </div>

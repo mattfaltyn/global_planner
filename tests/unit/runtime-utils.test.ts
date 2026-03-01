@@ -1,14 +1,18 @@
 import nextConfig from "../../next.config";
 import playwrightConfig from "../../playwright.config";
-import { assertExists } from "../../lib/utils/assert";
 import { formatCoordinates, formatDistance, formatDuration } from "../../lib/data/formatters";
 import { loadDataset } from "../../lib/data/loadDataset";
-import { getHoverContent } from "../../components/globe/GlobeShell";
-import { getAirportPointOfView, getFlyDurationMs } from "../../lib/globe/camera";
+import {
+  getAirportPointOfView,
+  getFlyDurationMs,
+  getLegPointOfView,
+  getOverviewPointOfView,
+} from "../../lib/globe/camera";
 import { globeColors } from "../../lib/globe/colors";
 import { getRouteAltitude, getRouteStroke } from "../../lib/globe/routeGeometry";
 import { appReducer, initialAppState } from "../../lib/state/appState";
-import { createFixtureDataset } from "../fixtures/dataset";
+import { assertExists } from "../../lib/utils/assert";
+import { createFixtureDataset, createResolvedFixtureItinerary } from "../fixtures/dataset";
 
 describe("runtime config and utility modules", () => {
   it("exports the expected Next.js and Playwright config", () => {
@@ -19,7 +23,7 @@ describe("runtime config and utility modules", () => {
   });
 
   it("formats distances, durations, and coordinates", () => {
-    expect(formatDistance(5540)).toBe("5,540 km");
+    expect(formatDistance(7490)).toBe("7,490 km");
     expect(formatDuration(59)).toBe("59 min");
     expect(formatDuration(125)).toBe("2h 5m");
     expect(formatCoordinates(40.6413, -73.7781)).toBe("40.64° N · 73.78° W");
@@ -33,7 +37,27 @@ describe("runtime config and utility modules", () => {
     });
     expect(getFlyDurationMs(true)).toBe(450);
     expect(getFlyDurationMs(false)).toBe(900);
-    expect(globeColors.routeSelected).toBe("rgba(255, 184, 112, 0.9)");
+    const transatlanticLegPointOfView = getLegPointOfView(
+      { lat: 49.1947, lon: -123.1792 },
+      { lat: 41.2481, lon: -8.6814 }
+    );
+    expect(transatlanticLegPointOfView.lat).toBeCloseTo(45.2214);
+    expect(transatlanticLegPointOfView.lng).toBeCloseTo(-65.9303);
+    expect(transatlanticLegPointOfView.altitude).toBe(2.35);
+    expect(
+      getLegPointOfView(
+        { lat: null, lon: null },
+        { lat: 41.2481, lon: -8.6814 }
+      )
+    ).toEqual(getOverviewPointOfView([{ lat: null, lon: null }, { lat: 41.2481, lon: -8.6814 }]));
+    expect(getOverviewPointOfView([])).toEqual({ lat: 22, lng: -32, altitude: 2.05 });
+    expect(
+      getOverviewPointOfView([
+        { kind: "stop" as const, stopId: "a", lat: 10, lon: 20 },
+        { kind: "stop" as const, stopId: "b", lat: 30, lon: 40 },
+      ])
+    ).toEqual({ lat: 20, lng: 30, altitude: 1.6 });
+    expect(globeColors.airLegSelected).toBe("rgba(108, 228, 255, 0.9)");
     expect(getRouteAltitude(100)).toBeCloseTo(0.04);
     expect(getRouteAltitude(30000)).toBeCloseTo(0.2);
     expect(getRouteStroke(1000, false)).toBeCloseTo(0.14);
@@ -57,9 +81,7 @@ describe("runtime config and utility modules", () => {
     const loaded = await loadDataset();
 
     expect(fetchMock).toHaveBeenCalledTimes(3);
-    expect(loaded.indexes.airportsById.get("3797")?.name).toBe(
-      "John F Kennedy International Airport"
-    );
+    expect(loaded.indexes.airportsById.get("3")?.name).toBe("Humberto Delgado Airport");
     fetchMock.mockRestore();
   });
 
@@ -77,70 +99,171 @@ describe("runtime config and utility modules", () => {
 
   it("exercises reducer branches and assertions", () => {
     const dataset = createFixtureDataset();
+    const { stops, legs } = createResolvedFixtureItinerary();
     let state = appReducer(initialAppState, { type: "dataset/loading" });
     state = appReducer(state, { type: "dataset/loaded", dataset });
-    state = appReducer(state, {
-      type: "hover/airport",
-      airportId: "3797",
-      x: 10,
-      y: 20,
-    });
-    state = appReducer(state, {
-      type: "hover/route",
-      routeId: "3797__507",
-      x: 11,
-      y: 22,
-    });
+    state = appReducer(state, { type: "hover/stop", stopId: "seed-stop-0", x: 10, y: 20 });
+    state = appReducer(state, { type: "hover/leg", legId: legs[0].id, x: 11, y: 22 });
     state = appReducer(state, { type: "hover/clear" });
-    state = appReducer(state, { type: "selection/airport", airportId: "3797" });
-    state = appReducer(state, {
-      type: "selection/route",
-      routeId: "3797__507",
-      airportId: "3797",
-    });
-    state = appReducer(state, {
-      type: "selection/hydrate",
-      selection: { kind: "airport", airportId: "507" },
-    });
+    state = appReducer(state, { type: "selection/hydrate", selection: { kind: "stop", stopId: "seed-stop-1" } });
     state = appReducer(state, { type: "selection/clear" });
-    state = appReducer(state, { type: "search/query", value: "JFK" });
-    state = appReducer(state, { type: "panel/filter", value: "lon" });
-    state = appReducer(state, { type: "panel/sort", value: "distance" });
+    state = appReducer(state, { type: "itinerary/seed", stops });
+    state = appReducer(state, { type: "itinerary/select-stop", stopId: "seed-stop-1" });
+    state = appReducer(state, { type: "itinerary/select-leg", legId: legs[0].id });
+    state = appReducer(state, { type: "itinerary/set-insert-index", index: 1 });
+    state = appReducer(state, { type: "search/query", value: "MAD" });
     state = appReducer(state, { type: "device/touch", value: true });
+    state = appReducer(state, { type: "itinerary/add-stop", airport: dataset.airports[8] });
+    const addedStopId = state.itinerary.stops.at(-1)?.id ?? "";
+    state = appReducer(state, {
+      type: "itinerary/update-stop",
+      stopId: addedStopId,
+      patch: { notes: "added" },
+    });
+    state = appReducer(state, { type: "itinerary/move-stop-up", stopId: addedStopId });
+    state = appReducer(state, { type: "itinerary/move-stop-down", stopId: addedStopId });
+    state = appReducer(state, { type: "itinerary/set-leg-mode", legId: state.itinerary.legs[0].id, mode: "ground" });
+    state = appReducer(state, { type: "itinerary/replace-anchor", stopId: "seed-stop-1" });
+    state = appReducer(state, { type: "itinerary/add-stop", airport: dataset.airports[4] });
+    state = appReducer(state, { type: "playback/play", legIndex: 1 });
+    state = appReducer(state, { type: "playback/pause" });
+    state = appReducer(state, { type: "playback/set-speed", speed: 2 });
+    state = appReducer(state, { type: "playback/set-progress", progress: 0.4 });
+    state = appReducer(state, { type: "playback/step-next" });
+    state = appReducer(state, { type: "playback/step-prev" });
+    state = appReducer(state, { type: "playback/advance-frame", deltaMs: 100 });
+    state = appReducer(state, { type: "itinerary/remove-stop", stopId: addedStopId });
+    state = appReducer(state, { type: "itinerary/move-stop-up", stopId: "seed-stop-0" });
+    state = appReducer(state, {
+      type: "itinerary/move-stop-down",
+      stopId: state.itinerary.stops.at(-1)?.id ?? "",
+    });
+    state = appReducer(state, { type: "playback/reset" });
     state = appReducer(state, { type: "dataset/error", message: "boom" });
     state = appReducer(state, { type: "unknown" } as never);
 
+    const addAfterSelectedStop = appReducer(
+      appReducer(
+        appReducer(initialAppState, { type: "itinerary/seed", stops }),
+        { type: "itinerary/select-stop", stopId: "seed-stop-1" }
+      ),
+      { type: "itinerary/add-stop", airport: dataset.airports[5] }
+    );
+    const removedSelectedStop = appReducer(
+      appReducer(
+        appReducer(initialAppState, { type: "itinerary/seed", stops }),
+        { type: "itinerary/select-stop", stopId: "seed-stop-1" }
+      ),
+      { type: "itinerary/remove-stop", stopId: "seed-stop-1" }
+    );
+    const removedSelectedLeg = appReducer(
+      appReducer(
+        appReducer(initialAppState, { type: "itinerary/seed", stops }),
+        { type: "itinerary/select-leg", legId: legs[0].id }
+      ),
+      { type: "itinerary/remove-stop", stopId: "seed-stop-0" }
+    );
+    const addAfterHydratedSelection = appReducer(
+      appReducer(
+        appReducer(initialAppState, { type: "itinerary/seed", stops }),
+        { type: "selection/hydrate", selection: { kind: "stop", stopId: "seed-stop-1" } }
+      ),
+      { type: "itinerary/add-stop", airport: dataset.airports[6] }
+    );
+
     expect(state.loadState).toEqual({ status: "error", message: "boom" });
+    expect(addAfterSelectedStop.itinerary.stops[2]?.label).toBe("Barcelona");
+    expect(addAfterHydratedSelection.itinerary.stops[2]?.label).toBe("Valencia");
+    expect(removedSelectedStop.selection).toBeNull();
+    expect(removedSelectedLeg.selection).toBeNull();
     expect(state.isTouchDevice).toBe(true);
     expect(assertExists("ok", "missing")).toBe("ok");
     expect(() => assertExists(null, "missing")).toThrow("missing");
   });
 
-  it("handles hover content edge cases", () => {
+  it("covers reducer playback and insertion edge branches", () => {
     const dataset = createFixtureDataset();
-    const brokenRouteDataset = createFixtureDataset();
-    brokenRouteDataset.indexes.routesById.delete("3797__507");
-    const brokenAirportDataset = createFixtureDataset();
-    brokenAirportDataset.indexes.airportsById.delete("507");
+    const { stops, legs } = createResolvedFixtureItinerary();
 
-    expect(getHoverContent(null, dataset)).toBeNull();
-    expect(
-      getHoverContent(
-        { kind: "airport", airportId: "missing", x: 0, y: 0 },
-        dataset
-      )
-    ).toBeNull();
-    expect(
-      getHoverContent(
-        { kind: "route", routeId: "3797__507", x: 0, y: 0 },
-        brokenRouteDataset
-      )
-    ).toBeNull();
-    expect(
-      getHoverContent(
-        { kind: "route", routeId: "3797__507", x: 0, y: 0 },
-        brokenAirportDataset
-      )
-    ).toBeNull();
+    const pausedFromPlaying = appReducer(
+      {
+        ...initialAppState,
+        itinerary: { ...initialAppState.itinerary, stops, legs },
+        playback: {
+          ...initialAppState.playback,
+          status: "playing",
+        },
+      },
+      { type: "itinerary/select-stop", stopId: "seed-stop-1" }
+    );
+
+    const playingLegSelection = appReducer(
+      {
+        ...initialAppState,
+        itinerary: { ...initialAppState.itinerary, stops, legs },
+        playback: {
+          ...initialAppState.playback,
+          status: "playing",
+        },
+      },
+      { type: "itinerary/select-leg", legId: legs[0].id }
+    );
+
+    const appendedStop = appReducer(
+      {
+        ...initialAppState,
+        itinerary: { ...initialAppState.itinerary, stops, legs },
+      },
+      { type: "itinerary/add-stop", airport: dataset.airports[8] }
+    );
+
+    const removedToEmpty = appReducer(
+      {
+        ...initialAppState,
+        itinerary: {
+          ...initialAppState.itinerary,
+          stops: stops.slice(0, 2),
+          legs: legs.slice(0, 1),
+        },
+        playback: {
+          ...initialAppState.playback,
+          status: "playing",
+          activeLegIndex: 0,
+          progress: 0.6,
+        },
+      },
+      { type: "itinerary/remove-stop", stopId: "seed-stop-0" }
+    );
+
+    const playWithoutLegIndex = appReducer(
+      {
+        ...initialAppState,
+        itinerary: { ...initialAppState.itinerary, stops, legs },
+        playback: {
+          ...initialAppState.playback,
+          activeLegIndex: 2,
+          progress: 0.4,
+          status: "paused",
+        },
+      },
+      { type: "playback/play" }
+    );
+
+    const scrubFromIdle = appReducer(initialAppState, {
+      type: "playback/set-progress",
+      progress: 1.4,
+    });
+
+    expect(pausedFromPlaying.playback.status).toBe("paused");
+    expect(playingLegSelection.playback.status).toBe("playing");
+    expect(appendedStop.itinerary.stops.at(-1)?.label).toBe("Madrid");
+    expect(appendedStop.itinerary.selectedInsertIndex).toBe(stops.length);
+    expect(removedToEmpty.itinerary.legs).toHaveLength(0);
+    expect(removedToEmpty.playback.progress).toBe(0);
+    expect(removedToEmpty.playback.status).toBe("idle");
+    expect(playWithoutLegIndex.playback.activeLegIndex).toBe(2);
+    expect(playWithoutLegIndex.playback.progress).toBe(0.4);
+    expect(scrubFromIdle.playback.progress).toBe(1);
+    expect(scrubFromIdle.playback.status).toBe("paused");
   });
 });

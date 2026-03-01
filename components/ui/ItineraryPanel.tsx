@@ -27,7 +27,6 @@ type ItineraryPanelProps = {
   isTouchDevice: boolean;
   onClose: () => void;
   onSelectStop: (stopId: string) => void;
-  onSelectLeg: (legId: string) => void;
   onMoveStopUp: (stopId: string) => void;
   onMoveStopDown: (stopId: string) => void;
   onRemoveStop: (stopId: string) => void;
@@ -57,6 +56,10 @@ function formatDateSpan(start: string, end: string) {
   )}`;
 }
 
+function getStopLabel(stops: ItineraryStop[], stopId: string) {
+  return stops.find((stop) => stop.id === stopId)?.label ?? stopId;
+}
+
 export function ItineraryPanel({
   stops,
   legs,
@@ -65,7 +68,6 @@ export function ItineraryPanel({
   isTouchDevice,
   onClose,
   onSelectStop,
-  onSelectLeg,
   onMoveStopUp,
   onMoveStopDown,
   onRemoveStop,
@@ -142,7 +144,8 @@ export function ItineraryPanel({
         </dl>
         {activeLeg ? (
           <p className={styles.muted}>
-            Active leg: {activeLeg.fromStopId} to {activeLeg.toStopId}
+            Active leg: {getStopLabel(stops, activeLeg.fromStopId)} to{" "}
+            {getStopLabel(stops, activeLeg.toStopId)}
           </p>
         ) : null}
       </section>

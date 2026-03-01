@@ -1,28 +1,42 @@
-import type { DatasetManifest } from "../../lib/data/types";
+import type { ItineraryLeg, ItineraryStop } from "../../lib/data/types";
+import { getTravelModeCounts } from "../../lib/state/selectors";
 import styles from "./GlobeLegend.module.css";
 
 type GlobeLegendProps = {
-  manifest: DatasetManifest;
+  stops: ItineraryStop[];
+  legs: ItineraryLeg[];
 };
 
-export function GlobeLegend({ manifest }: GlobeLegendProps) {
+export function GlobeLegend({ stops, legs }: GlobeLegendProps) {
+  const modeCounts = getTravelModeCounts(legs);
+
   return (
     <aside className={styles.legend}>
-      <p className={styles.kicker}>V1 dataset</p>
-      <h2 className={styles.title}>Major-airport direct route globe</h2>
+      <p className={styles.kicker}>Trip planner</p>
+      <h2 className={styles.title}>Travel itinerary</h2>
       <dl className={styles.stats}>
         <div>
-          <dt>Airports</dt>
-          <dd>{manifest.airportCount}</dd>
+          <dt>Stops</dt>
+          <dd>{stops.length}</dd>
         </div>
         <div>
-          <dt>Routes</dt>
-          <dd>{manifest.routeCount}</dd>
+          <dt>Legs</dt>
+          <dd>{legs.length}</dd>
+        </div>
+      </dl>
+      <dl className={styles.stats}>
+        <div>
+          <dt>Air</dt>
+          <dd>{modeCounts.air}</dd>
+        </div>
+        <div>
+          <dt>Ground</dt>
+          <dd>{modeCounts.ground}</dd>
         </div>
       </dl>
       <p className={styles.copy}>
-        Hover for a quick read. Click an airport or route to open details, search,
-        and fly across the network.
+        Add stops from search, set each leg to air or ground, and press play to
+        animate the route.
       </p>
     </aside>
   );

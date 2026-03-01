@@ -8,6 +8,7 @@ import styles from "./SearchBox.module.css";
 type SearchBoxProps = {
   query: string;
   results: AirportRecord[];
+  placeholder?: string;
   onQueryChange: (value: string) => void;
   onSelect: (airport: AirportRecord) => void;
 };
@@ -15,6 +16,7 @@ type SearchBoxProps = {
 export function SearchBox({
   query,
   results,
+  placeholder = "Search by airport, city, IATA, or ICAO",
   onQueryChange,
   onSelect,
 }: SearchBoxProps) {
@@ -34,7 +36,7 @@ export function SearchBox({
       <input
         id="airport-search"
         className={styles.input}
-        placeholder="Search by airport, city, IATA, or ICAO"
+        placeholder={placeholder}
         autoComplete="off"
         value={query}
         onChange={(event) => onQueryChange(event.target.value)}

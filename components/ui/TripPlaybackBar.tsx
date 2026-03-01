@@ -66,12 +66,6 @@ export function TripPlaybackBar({
         <div className={styles.meta}>
           <p className={styles.kicker}>Trip playback</p>
           <h2 className={styles.routeLabel}>{getActiveLegLabel(stops, legs, playback)}</h2>
-          <p className={styles.stopLabel}>
-            {currentStop?.label ?? "Start"} {"->"} {nextStop?.label ?? "Finish"}
-            <span className={styles.phase}>
-              {playback.phase === "dwell" ? " · Arrived" : " · En route"}
-            </span>
-          </p>
         </div>
 
         {daySummary ? (

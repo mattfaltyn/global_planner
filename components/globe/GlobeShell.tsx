@@ -534,27 +534,51 @@ export function GlobeShell() {
                   />
                 </div>
 
-                <div className={styles.desktopPlaybackPanel}>
-                  <TripPlaybackBar
+                <div className={styles.desktopDockWrap} ref={dockRef}>
+                  <ItineraryDock
                     stops={state.itinerary.stops}
                     legs={state.itinerary.legs}
+                    selection={state.selection}
                     playback={state.playback}
                     layoutMode={layoutMode}
-                    compact
+                    shellState={{
+                      mode: state.dockMode,
+                      collapsed: state.dockCollapsed,
+                    }}
                     showRecenter={autoFollowSuspended && state.playback.status === "playing"}
-                    onPlay={() => dispatch({ type: "playback/play" })}
-                    onPause={() => dispatch({ type: "playback/pause" })}
-                    onReset={() => dispatch({ type: "playback/reset" })}
-                    onStepPrev={() => dispatch({ type: "playback/step-prev" })}
-                    onStepNext={() => dispatch({ type: "playback/step-next" })}
-                    onSpeedChange={(speed) => dispatch({ type: "playback/set-speed", speed })}
-                    onProgressChange={(progress) =>
-                      dispatch({ type: "playback/set-trip-progress", progress })
-                    }
-                    onOpenEdit={handleOpenEdit}
+                    onSetMode={handleSetMode}
+                    onToggleCollapsed={handleToggleCollapsed}
                     onRecenter={() => {
                       setAutoFollowSuspended(false);
                       setForceRecenterToken((token) => token + 1);
+                    }}
+                    onSelectStop={handleSelectStop}
+                    onMoveStopUp={(stopId) =>
+                      dispatch({ type: "itinerary/move-stop-up", stopId })
+                    }
+                    onMoveStopDown={(stopId) =>
+                      dispatch({ type: "itinerary/move-stop-down", stopId })
+                    }
+                    onRemoveStop={(stopId) =>
+                      dispatch({ type: "itinerary/remove-stop", stopId })
+                    }
+                    onInsertAfter={(index, stopId) => {
+                      dispatch({ type: "itinerary/set-insert-index", index });
+                      handleSelectStop(stopId);
+                    }}
+                    onUpdateStop={(stopId, patch) =>
+                      dispatch({ type: "itinerary/update-stop", stopId, patch })
+                    }
+                    onReplaceAnchor={(stopId) =>
+                      dispatch({ type: "itinerary/replace-anchor", stopId })
+                    }
+                    onSetLegMode={(legId, mode) =>
+                      dispatch({ type: "itinerary/set-leg-mode", legId, mode })
+                    }
+                    onPlayLeg={(legId) => {
+                      dispatch({ type: "dock/set-mode", mode: "playback" });
+                      dispatch({ type: "playback/jump-to-leg-start", legId });
+                      dispatch({ type: "playback/play" });
                     }}
                   />
                 </div>
@@ -586,54 +610,32 @@ export function GlobeShell() {
                 />
               </section>
 
-              <div className={styles.desktopDockWrap} ref={dockRef}>
-                <ItineraryDock
+              <aside className={styles.desktopRightRail}>
+                <div className={styles.desktopPlaybackPanel} ref={playbackRailRef}>
+                  <TripPlaybackBar
                   stops={state.itinerary.stops}
                   legs={state.itinerary.legs}
-                  selection={state.selection}
                   playback={state.playback}
                   layoutMode={layoutMode}
-                  shellState={{
-                    mode: state.dockMode,
-                    collapsed: state.dockCollapsed,
-                  }}
+                  compact
                   showRecenter={autoFollowSuspended && state.playback.status === "playing"}
-                  onSetMode={handleSetMode}
-                  onToggleCollapsed={handleToggleCollapsed}
+                  onPlay={() => dispatch({ type: "playback/play" })}
+                  onPause={() => dispatch({ type: "playback/pause" })}
+                  onReset={() => dispatch({ type: "playback/reset" })}
+                  onStepPrev={() => dispatch({ type: "playback/step-prev" })}
+                  onStepNext={() => dispatch({ type: "playback/step-next" })}
+                  onSpeedChange={(speed) => dispatch({ type: "playback/set-speed", speed })}
+                  onProgressChange={(progress) =>
+                    dispatch({ type: "playback/set-trip-progress", progress })
+                  }
+                  onOpenEdit={handleOpenEdit}
                   onRecenter={() => {
                     setAutoFollowSuspended(false);
                     setForceRecenterToken((token) => token + 1);
                   }}
-                  onSelectStop={handleSelectStop}
-                  onMoveStopUp={(stopId) =>
-                    dispatch({ type: "itinerary/move-stop-up", stopId })
-                  }
-                  onMoveStopDown={(stopId) =>
-                    dispatch({ type: "itinerary/move-stop-down", stopId })
-                  }
-                  onRemoveStop={(stopId) =>
-                    dispatch({ type: "itinerary/remove-stop", stopId })
-                  }
-                  onInsertAfter={(index, stopId) => {
-                    dispatch({ type: "itinerary/set-insert-index", index });
-                    handleSelectStop(stopId);
-                  }}
-                  onUpdateStop={(stopId, patch) =>
-                    dispatch({ type: "itinerary/update-stop", stopId, patch })
-                  }
-                  onReplaceAnchor={(stopId) =>
-                    dispatch({ type: "itinerary/replace-anchor", stopId })
-                  }
-                  onSetLegMode={(legId, mode) =>
-                    dispatch({ type: "itinerary/set-leg-mode", legId, mode })
-                  }
-                  onPlayLeg={(legId) => {
-                    dispatch({ type: "dock/set-mode", mode: "playback" });
-                    dispatch({ type: "playback/jump-to-leg-start", legId });
-                    dispatch({ type: "playback/play" });
-                  }}
                 />
-              </div>
+                </div>
+              </aside>
             </div>
           ) : null}
 

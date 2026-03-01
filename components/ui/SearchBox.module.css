@@ -1,11 +1,11 @@
 .wrap {
   position: relative;
-  width: min(280px, calc(100vw - 48px));
+  width: min(300px, calc(100vw - 48px));
   transition: width 180ms ease;
 }
 
 .desktopWrap.expanded {
-  width: min(360px, calc(100vw - 48px));
+  width: min(380px, calc(100vw - 48px));
 }
 
 .mobileWrap {
@@ -14,11 +14,11 @@
 
 .label {
   display: block;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
   color: var(--muted);
-  font-size: 0.82rem;
+  font-size: 0.78rem;
   text-transform: uppercase;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.16em;
 }
 
 .mobileLabel {
@@ -35,17 +35,30 @@
 
 .input {
   width: 100%;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 16px;
-  background: rgba(8, 15, 28, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(8, 16, 30, 0.92), rgba(8, 15, 28, 0.78));
   color: var(--text);
-  padding: 14px 16px;
-  box-shadow: var(--shadow);
-  backdrop-filter: blur(18px);
+  padding: 15px 18px;
+  box-shadow: var(--shadow-soft);
+  backdrop-filter: blur(16px);
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
 }
 
 .input::placeholder {
   color: rgba(237, 244, 255, 0.45);
+}
+
+.input:focus {
+  outline: none;
+  border-color: rgba(108, 228, 255, 0.34);
+  box-shadow:
+    0 0 0 1px rgba(108, 228, 255, 0.08),
+    0 18px 44px rgba(0, 0, 0, 0.28);
+  transform: translateY(-1px);
 }
 
 @media (max-width: 960px) {

@@ -25,34 +25,25 @@ import {
   getVelocityAdjustedPlaybackSmoothingProfile,
   interpolatePlaybackPointOfView,
   resolveCameraIntent,
-  interpolatePointOfView,
   shouldApplyPointOfViewUpdate,
 } from "../../lib/globe/camera";
 import { globeColors } from "../../lib/globe/colors";
 import { interpolateTravelerPosition } from "../../lib/itinerary/interpolation";
-import { getVisibleLegRenderState } from "../../lib/state/selectors";
+import {
+  getPlaybackRenderWindow,
+  getVisibleLegRenderState,
+  shouldRenderLegInPlaybackWindow,
+  shouldRenderStopInPlaybackWindow,
+} from "../../lib/state/selectors";
 import styles from "./GlobeCanvas.module.css";
 
 type CountryFeature = {
   type: "Feature";
-  properties: Record<string, unknown> & {
-    NAME?: string;
-    NAME_LONG?: string;
-    MIN_LABEL?: number;
-    POP_EST?: number;
-    featurecla?: string;
-  };
+  properties: Record<string, unknown>;
   geometry: {
     type: "Polygon" | "MultiPolygon";
     coordinates: unknown;
   };
-};
-
-type CountryLabelDatum = {
-  lat: number;
-  lng: number;
-  text: string;
-  size: number;
 };
 
 type GlobeCanvasProps = {
@@ -65,6 +56,13 @@ type GlobeCanvasProps = {
   forceRecenterToken?: number;
   onAutoFollowSuspendedChange?: (suspended: boolean) => void;
   onCameraStateChange?: (snapshot: CameraSnapshot) => void;
+  onRenderStateChange?: (snapshot: {
+    visibleLabelCount: number;
+    visiblePathCount: number;
+    visibleStopCount: number;
+    playbackStatus: PlaybackState["status"];
+    activeLegIndex: number;
+  }) => void;
   onHoverStop: (stopId: string, x: number, y: number) => void;
   onHoverLeg: (legId: string, x: number, y: number) => void;
   onClearHover: () => void;
@@ -86,125 +84,6 @@ type GlobePathDatum = RenderLegDatum | TravelerTrailDatum;
 
 const countryBorders = countries.features as CountryFeature[];
 
-function getRingPlanarArea(ring: number[][]) {
-  let area = 0;
-
-  for (let index = 0; index < ring.length; index += 1) {
-    const current = ring[index];
-    const next = ring[(index + 1) % ring.length];
-    if (!current || !next) {
-      continue;
-    }
-
-    area += current[0] * next[1] - next[0] * current[1];
-  }
-
-  return area / 2;
-}
-
-function getRingCentroid(ring: number[][]) {
-  const area = getRingPlanarArea(ring);
-  if (Math.abs(area) < 1e-6) {
-    const totals = ring.reduce(
-      (sum, point) => {
-        sum.lng += point[0] ?? 0;
-        sum.lat += point[1] ?? 0;
-        return sum;
-      },
-      { lat: 0, lng: 0 }
-    );
-
-    return {
-      lng: totals.lng / Math.max(ring.length, 1),
-      lat: totals.lat / Math.max(ring.length, 1),
-      area: 0,
-    };
-  }
-
-  let centroidLng = 0;
-  let centroidLat = 0;
-
-  for (let index = 0; index < ring.length; index += 1) {
-    const current = ring[index];
-    const next = ring[(index + 1) % ring.length];
-    if (!current || !next) {
-      continue;
-    }
-
-    const factor = current[0] * next[1] - next[0] * current[1];
-    centroidLng += (current[0] + next[0]) * factor;
-    centroidLat += (current[1] + next[1]) * factor;
-  }
-
-  return {
-    lng: centroidLng / (6 * area),
-    lat: centroidLat / (6 * area),
-    area: Math.abs(area),
-  };
-}
-
-function getCountryLabelAnchor(feature: CountryFeature) {
-  const geometry = feature.geometry;
-  const polygons =
-    geometry.type === "Polygon"
-      ? [geometry.coordinates as number[][][]]
-      : (geometry.coordinates as number[][][][]);
-
-  let best: { lat: number; lng: number; area: number } | null = null;
-
-  for (const polygon of polygons) {
-    const outerRing = polygon[0];
-    if (!outerRing || outerRing.length < 3) {
-      continue;
-    }
-
-    const centroid = getRingCentroid(outerRing);
-    if (!best || centroid.area > best.area) {
-      best = centroid;
-    }
-  }
-
-  if (!best) {
-    return null;
-  }
-
-  return {
-    lat: best.lat,
-    lng: best.lng,
-  };
-}
-
-function getCountryLabelSize(feature: CountryFeature) {
-  const population = Number(feature.properties.POP_EST ?? 0);
-  const minLabel = Number(feature.properties.MIN_LABEL ?? 10);
-
-  if (population > 200_000_000 || minLabel <= 2) {
-    return 0.78;
-  }
-  if (population > 80_000_000 || minLabel <= 3) {
-    return 0.68;
-  }
-
-  return 0.58;
-}
-
-function shouldRenderCountryLabel(feature: CountryFeature) {
-  const name = feature.properties.NAME_LONG ?? feature.properties.NAME ?? "";
-  const minLabel = Number(feature.properties.MIN_LABEL ?? 10);
-  const population = Number(feature.properties.POP_EST ?? 0);
-  const featureClass = String(feature.properties.featurecla ?? "");
-
-  if (!name || name === "Antarctica") {
-    return false;
-  }
-
-  if (!featureClass.includes("Admin-0 country")) {
-    return false;
-  }
-
-  return minLabel <= 4 || population >= 25_000_000;
-}
-
 function getScreenCoords(
   globe: GlobeMethods,
   lat: number,
@@ -212,6 +91,10 @@ function getScreenCoords(
   altitude: number
 ) {
   return globe.getScreenCoords(lat, lon, altitude) ?? { x: 0, y: 0 };
+}
+
+function isTravelerTrailDatum(datum: GlobePathDatum): datum is TravelerTrailDatum {
+  return "kind" in datum && datum.kind === "traveler-trail";
 }
 
 function getLegRenderColor(leg: RenderLegDatum) {
@@ -351,6 +234,7 @@ export function GlobeCanvas({
   forceRecenterToken = 0,
   onAutoFollowSuspendedChange,
   onCameraStateChange,
+  onRenderStateChange,
   onHoverStop,
   onHoverLeg,
   onClearHover,
@@ -368,34 +252,22 @@ export function GlobeCanvas({
   const lastManualInteractionAtRef = useRef<number | null>(null);
   const [size, setSize] = useState({ width: 1280, height: 720 });
 
-  const visibleStops = useMemo(
+  const resolvedStopPoints = useMemo(
     () =>
-      stops.filter(
-        (stop): stop is ItineraryStop & { lat: number; lon: number } =>
-          stop.lat !== null && stop.lon !== null
+      stops.flatMap((stop, stopIndex) =>
+        stop.lat !== null && stop.lon !== null
+          ? [
+              {
+                kind: "stop" as const,
+                stopId: stop.id,
+                stopIndex,
+                lat: stop.lat,
+                lon: stop.lon,
+              },
+            ]
+          : []
       ),
     [stops]
-  );
-
-  const countryLabels = useMemo<CountryLabelDatum[]>(
-    () =>
-      countryBorders
-        .filter(shouldRenderCountryLabel)
-        .map((feature) => {
-          const anchor = getCountryLabelAnchor(feature);
-          if (!anchor) {
-            return null;
-          }
-
-          return {
-            lat: anchor.lat,
-            lng: anchor.lng,
-            text: String(feature.properties.NAME_LONG ?? feature.properties.NAME ?? ""),
-            size: getCountryLabelSize(feature),
-          };
-        })
-        .filter((label): label is CountryLabelDatum => label !== null),
-    []
   );
 
   const activeLeg = legs[playback.activeLegIndex] ?? null;
@@ -420,16 +292,25 @@ export function GlobeCanvas({
     };
   }, [activeLeg, playback.activeLegProgress, playback.status, playback.tripProgress]);
 
+  const renderWindow = useMemo(
+    () => getPlaybackRenderWindow(stops, legs, playback),
+    [legs.length, playback.activeLegIndex, playback.status, stops.length]
+  );
+
+  const visibleStopPoints = useMemo(
+    () =>
+      resolvedStopPoints
+        .filter((stop) =>
+          shouldRenderStopInPlaybackWindow(stop.stopIndex, stop.stopId, selection, renderWindow)
+        ),
+    [renderWindow, resolvedStopPoints, selection]
+  );
+
   const pointsData = useMemo(
     () =>
       travelerPoint
         ? ([
-            ...visibleStops.map((stop) => ({
-              kind: "stop" as const,
-              stopId: stop.id,
-              lat: stop.lat,
-              lon: stop.lon,
-            })),
+            ...visibleStopPoints,
             {
               kind: "traveler-glow" as const,
               lat: travelerPoint.lat,
@@ -444,22 +325,30 @@ export function GlobeCanvas({
             },
             travelerPoint,
           ] satisfies GlobePointDatum[])
-        : visibleStops.map((stop) => ({
-            kind: "stop" as const,
-            stopId: stop.id,
-            lat: stop.lat,
-            lon: stop.lon,
-          })),
-    [travelerPoint, visibleStops]
+        : visibleStopPoints,
+    [travelerPoint, visibleStopPoints]
   );
 
   const renderedLegs = useMemo(
     () =>
-      legs.map((leg) => ({
-        ...leg,
-        renderState: getVisibleLegRenderState(leg, legs, playback, selection),
-      })),
-    [legs, playback, selection]
+      legs
+        .map((leg, index) => ({
+          ...leg,
+          renderState: getVisibleLegRenderState(leg, legs, playback, selection),
+          legIndex: index,
+        }))
+        .filter((leg) => {
+          if (
+            selection?.kind === "leg" &&
+            selection.legId === leg.id
+          ) {
+            return true;
+          }
+
+          return shouldRenderLegInPlaybackWindow(leg.legIndex, renderWindow);
+        })
+        .map(({ legIndex: _legIndex, ...leg }) => leg),
+    [legs, playback.activeLegIndex, playback.status, renderWindow, selection]
   );
 
   const travelerTrail = useMemo(
@@ -487,19 +376,14 @@ export function GlobeCanvas({
   const selectedLegId = selection?.kind === "leg" ? selection.legId : null;
   const activeOriginStopId = activeLeg?.fromStopId ?? null;
   const activeDestinationStopId = activeLeg?.toStopId ?? null;
-  const visitedStopIds = new Set(
+  const visitedStopCutoffIndex =
     playback.status === "idle"
-      ? []
-      : stops
-          .slice(
-            0,
-            Math.min(
-              stops.length,
-              playback.activeLegIndex + (playback.phase === "dwell" ? 2 : 1)
-            )
-          )
-          .map((stop) => stop.id)
-  );
+      ? -1
+      : Math.min(
+          stops.length - 1,
+          playback.activeLegIndex + (playback.phase === "dwell" ? 1 : 0)
+        );
+  const visibleStopCount = visibleStopPoints.length;
 
   const applyGlobeMaterialSettings = useCallback(() => {
     const globe = globeRef.current as
@@ -662,7 +546,7 @@ export function GlobeCanvas({
 
   useEffect(() => {
     const globe = globeRef.current;
-    if (!globe || visibleStops.length === 0) {
+    if (!globe || resolvedStopPoints.length === 0) {
       return;
     }
     const nowMs = Date.now();
@@ -791,7 +675,23 @@ export function GlobeCanvas({
     selection,
     stops,
     travelerPoint,
-    visibleStops.length,
+    resolvedStopPoints.length,
+  ]);
+
+  useEffect(() => {
+    onRenderStateChange?.({
+      visibleLabelCount: 0,
+      visiblePathCount: pathData.length,
+      visibleStopCount,
+      playbackStatus: playback.status,
+      activeLegIndex: playback.activeLegIndex,
+    });
+  }, [
+    onRenderStateChange,
+    pathData.length,
+    playback.activeLegIndex,
+    playback.status,
+    visibleStopCount,
   ]);
 
   return (
@@ -819,16 +719,6 @@ export function GlobeCanvas({
         polygonStrokeColor={() => "rgba(221, 243, 255, 0.28)"}
         polygonAltitude={0.0005}
         polygonsTransitionDuration={0}
-        labelsData={countryLabels}
-        labelLat="lat"
-        labelLng="lng"
-        labelText="text"
-        labelColor={() => globeColors.countryLabel}
-        labelAltitude={0.012}
-        labelSize="size"
-        labelResolution={4}
-        labelIncludeDot={false}
-        labelsTransitionDuration={0}
         pointsData={pointsData}
         pointLat="lat"
         pointLng="lon"
@@ -858,7 +748,7 @@ export function GlobeCanvas({
             return 0.15;
           }
 
-          return visitedStopIds.has(datum.stopId) ? 0.08 : 0.1;
+          return datum.stopIndex <= visitedStopCutoffIndex ? 0.08 : 0.1;
         }}
         pointColor={(point: object) => {
           const datum = point as GlobePointDatum;
@@ -882,7 +772,7 @@ export function GlobeCanvas({
             return globeColors.stopActive;
           }
 
-          return visitedStopIds.has(datum.stopId)
+          return datum.stopIndex <= visitedStopCutoffIndex
             ? globeColors.stopVisited
             : globeColors.stop;
         }}
@@ -896,11 +786,11 @@ export function GlobeCanvas({
         pathResolution={8}
         pathStroke={(leg: object) => {
           const datum = leg as GlobePathDatum;
-          return datum.kind === "traveler-trail" ? 0.42 : getLegRenderStroke(datum);
+          return isTravelerTrailDatum(datum) ? 0.42 : getLegRenderStroke(datum);
         }}
         pathColor={(leg: object) => {
           const datum = leg as GlobePathDatum;
-          return datum.kind === "traveler-trail"
+          return isTravelerTrailDatum(datum)
             ? globeColors.travelerTrail
             : getLegRenderColor(datum);
         }}
@@ -938,7 +828,7 @@ export function GlobeCanvas({
           }
 
           const leg = path as GlobePathDatum;
-          if ("kind" in leg && leg.kind === "traveler-trail") {
+          if (isTravelerTrailDatum(leg)) {
             onClearHover();
             return;
           }
@@ -962,7 +852,7 @@ export function GlobeCanvas({
         }}
         onPathClick={(path: object | null) => {
           const leg = path as GlobePathDatum | null;
-          if (!leg || ("kind" in leg && leg.kind === "traveler-trail")) {
+          if (!leg || isTravelerTrailDatum(leg)) {
             return;
           }
 

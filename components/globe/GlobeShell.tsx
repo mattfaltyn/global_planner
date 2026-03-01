@@ -54,6 +54,13 @@ declare global {
         activeLegIndex: number;
       };
       getCameraState: () => CameraSnapshot | null;
+      getRenderState: () => {
+        visibleLabelCount: number;
+        visiblePathCount: number;
+        visibleStopCount: number;
+        playbackStatus: string;
+        activeLegIndex: number;
+      } | null;
     };
   }
 }
@@ -128,10 +135,17 @@ export function GlobeShell() {
   const [state, dispatch] = useReducer(appReducer, initialAppState);
   const [autoFollowSuspended, setAutoFollowSuspended] = useState(false);
   const [forceRecenterToken, setForceRecenterToken] = useState(0);
-  const [cameraState, setCameraState] = useState<CameraSnapshot | null>(null);
   const playbackStatusRef = useRef(state.playback.status);
   const playbackFrameIdRef = useRef<number | null>(null);
   const playbackLastTickRef = useRef<number | null>(null);
+  const cameraStateRef = useRef<CameraSnapshot | null>(null);
+  const renderStateRef = useRef<{
+    visibleLabelCount: number;
+    visiblePathCount: number;
+    visibleStopCount: number;
+    playbackStatus: string;
+    activeLegIndex: number;
+  } | null>(null);
   const deferredSearchQuery = useDeferredValue(state.searchQuery);
   const dataset = state.loadState.status === "ready" ? state.loadState.dataset : null;
   const searchResults =
@@ -149,24 +163,20 @@ export function GlobeShell() {
     [state.itinerary.legs]
   );
   const handleCameraStateChange = useCallback((snapshot: CameraSnapshot) => {
-    setCameraState((previous) => {
-      if (
-        previous &&
-        previous.mode === snapshot.mode &&
-        previous.autoFollowSuspended === snapshot.autoFollowSuspended &&
-        previous.targetPointOfView.lat === snapshot.targetPointOfView.lat &&
-        previous.targetPointOfView.lng === snapshot.targetPointOfView.lng &&
-        previous.targetPointOfView.altitude === snapshot.targetPointOfView.altitude &&
-        previous.currentPointOfView.lat === snapshot.currentPointOfView.lat &&
-        previous.currentPointOfView.lng === snapshot.currentPointOfView.lng &&
-        previous.currentPointOfView.altitude === snapshot.currentPointOfView.altitude
-      ) {
-        return previous;
-      }
-
-      return snapshot;
-    });
+    cameraStateRef.current = snapshot;
   }, []);
+  const handleRenderStateChange = useCallback(
+    (snapshot: {
+      visibleLabelCount: number;
+      visiblePathCount: number;
+      visibleStopCount: number;
+      playbackStatus: string;
+      activeLegIndex: number;
+    }) => {
+      renderStateRef.current = snapshot;
+    },
+    []
+  );
 
   useEffect(() => {
     dispatch({ type: "dataset/loading" });
@@ -340,13 +350,14 @@ export function GlobeShell() {
         tripProgress: state.playback.tripProgress,
         activeLegIndex: state.playback.activeLegIndex,
       }),
-      getCameraState: () => cameraState,
+      getCameraState: () => cameraStateRef.current,
+      getRenderState: () => renderStateRef.current,
     };
 
     return () => {
       delete window.__GLOBAL_PLANNER_TEST_API__;
     };
-  }, [cameraState, state.itinerary.legs, state.itinerary.stops, state.playback, state.selection]);
+  }, [state.itinerary.legs, state.itinerary.stops, state.playback, state.selection]);
 
   if (state.loadState.status === "error") {
     return <ErrorState message={state.loadState.message} onRetry={() => window.location.reload()} />;
@@ -367,6 +378,7 @@ export function GlobeShell() {
             forceRecenterToken={forceRecenterToken}
             onAutoFollowSuspendedChange={setAutoFollowSuspended}
             onCameraStateChange={handleCameraStateChange}
+            onRenderStateChange={handleRenderStateChange}
             onHoverStop={(stopId, x, y) =>
               dispatch({ type: "hover/stop", stopId, x, y })
             }

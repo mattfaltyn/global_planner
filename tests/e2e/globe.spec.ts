@@ -37,6 +37,20 @@ test("whole-trip playback and test api wiring work", async ({ page }) => {
       return page.evaluate(() => window.__GLOBAL_PLANNER_TEST_API__?.getCameraState()?.mode);
     })
     .toBe("playback-follow");
+  await expect
+    .poll(async () => {
+      return page.evaluate(() => window.__GLOBAL_PLANNER_TEST_API__?.getRenderState());
+    })
+    .toMatchObject({
+      playbackStatus: "playing",
+      activeLegIndex: 0,
+    });
+  const playbackRenderState = await page.evaluate(
+    () => window.__GLOBAL_PLANNER_TEST_API__?.getRenderState()
+  );
+  expect(playbackRenderState?.visibleLabelCount).toBe(0);
+  expect(playbackRenderState?.visiblePathCount).toBeLessThan(9);
+  expect(playbackRenderState?.visibleStopCount).toBeLessThan(9);
 
   await page.getByTestId("globe-canvas").getByRole("button", { name: "Simulate manual camera" }).click();
   await expect(
@@ -61,4 +75,14 @@ test("whole-trip playback and test api wiring work", async ({ page }) => {
   await page.getByTestId("globe-canvas").getByRole("button", { name: "Porto" }).click();
   await expect(page).toHaveURL(/stop=seed-stop-1/);
   await expect(page.getByTestId("test-globe-selection")).toContainText('"stopId":"seed-stop-1"');
+  await expect
+    .poll(async () => {
+      return page.evaluate(() => window.__GLOBAL_PLANNER_TEST_API__?.getRenderState());
+    })
+    .toMatchObject({
+      playbackStatus: "paused",
+      visibleLabelCount: 0,
+      visiblePathCount: 8,
+      visibleStopCount: 9,
+    });
 });

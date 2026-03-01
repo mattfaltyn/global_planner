@@ -28,13 +28,18 @@ import {
 } from "../../lib/itinerary/urls";
 import {
   getItineraryFitPointOfView,
+  getPlaybackCalendarProgressPercent,
   getLegByIndex,
   getPlaybackDaySummary,
   getPlaybackProgressPercent,
+  getTripProgressFromCalendarProgress,
+  getPlaybackRenderWindow,
   getSelectedLeg,
   getSelectedStop,
   getTravelModeCounts,
   getTripDateSpan,
+  shouldRenderLegInPlaybackWindow,
+  shouldRenderStopInPlaybackWindow,
 } from "../../lib/state/selectors";
 import { createFixtureDataset, createResolvedFixtureItinerary } from "../fixtures/dataset";
 
@@ -238,6 +243,7 @@ describe("itinerary search, selectors, and helpers", () => {
     });
     expect(getTripDateSpan([{ ...stops[0], departureDate: null }])).toBeNull();
     expect(getPlaybackProgressPercent(playback)).toBe(34);
+    expect(getPlaybackCalendarProgressPercent(stops, legs, playback)).toBe(35);
     expect(getPlaybackDaySummary(stops, legs, playback)).toEqual({
       currentDay: 18,
       totalDays: 50,
@@ -250,6 +256,8 @@ describe("itinerary search, selectors, and helpers", () => {
     expect(itineraryPointOfView.lng).toBeLessThan(-10);
     expect(itineraryPointOfView.lng).toBeGreaterThan(-90);
     expect(itineraryPointOfView.altitude).toBe(1.62);
+    expect(getTripProgressFromCalendarProgress(stops, legs, 1, 0.25)).toBeGreaterThan(0.2);
+    expect(getTripProgressFromCalendarProgress(stops, legs, 1, 0.25)).toBeLessThan(0.25);
   });
 
   it("builds whole-trip timeline frames, low path endpoints, and playback progression", () => {
@@ -316,5 +324,47 @@ describe("itinerary search, selectors, and helpers", () => {
         "ground"
       )
     ).toEqual([]);
+  });
+
+  it("uses deterministic playback windows", () => {
+    const { stops, legs } = createResolvedFixtureItinerary();
+    const playbackWindow = getPlaybackRenderWindow(stops, legs, {
+      status: "playing",
+      speed: 1,
+      tripProgress: 0.33,
+      activeLegIndex: 3,
+      activeLegProgress: 0.5,
+      phase: "travel",
+    });
+    const pausedWindow = getPlaybackRenderWindow(stops, legs, {
+      status: "paused",
+      speed: 1,
+      tripProgress: 0.33,
+      activeLegIndex: 3,
+      activeLegProgress: 0.5,
+      phase: "travel",
+    });
+
+    expect(playbackWindow).toEqual({
+      showAll: false,
+      minLegIndex: 0,
+      maxLegIndex: 7,
+      visibleStopRangeStart: 2,
+      visibleStopRangeEnd: 5,
+    });
+    expect(pausedWindow.showAll).toBe(true);
+    expect(shouldRenderLegInPlaybackWindow(7, playbackWindow)).toBe(true);
+    expect(shouldRenderLegInPlaybackWindow(8, playbackWindow)).toBe(false);
+    expect(
+      shouldRenderStopInPlaybackWindow(0, stops[0].id, null, playbackWindow)
+    ).toBe(false);
+    expect(
+      shouldRenderStopInPlaybackWindow(
+        0,
+        stops[0].id,
+        { kind: "stop", stopId: stops[0].id },
+        playbackWindow
+      )
+    ).toBe(true);
   });
 });

@@ -282,25 +282,25 @@ describe("runtime config and utility modules", () => {
       )
       .mockResolvedValueOnce(
         new Response(JSON.stringify(dataset.airports), { status: 200 })
-      )
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify(dataset.routes), { status: 200 })
       );
 
     const loaded = await loadDataset();
 
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(loaded.indexes.airportsById.get("3")?.name).toBe("Humberto Delgado Airport");
+    expect(loaded.routes).toEqual([]);
+    expect(loaded.indexes.routesById.size).toBe(0);
     fetchMock.mockRestore();
   });
 
   it("surfaces dataset fetch failures", async () => {
     const fetchMock = vi
       .spyOn(global, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 }))
       .mockResolvedValueOnce(new Response("missing", { status: 500 }));
 
     await expect(loadDataset()).rejects.toThrow(
-      "Failed to load /generated/manifest.v1.json: 500"
+      "Failed to load /generated/airports.v1.json: 500"
     );
 
     fetchMock.mockRestore();

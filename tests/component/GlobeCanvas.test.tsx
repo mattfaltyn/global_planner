@@ -181,10 +181,7 @@ describe("GlobeCanvas", () => {
     expect(latestGlobeProps?.globeImageUrl).toBe("/textures/earth-day.jpg");
     expect(Array.isArray(latestGlobeProps?.polygonsData)).toBe(true);
     expect((latestGlobeProps?.polygonsData as object[]).length).toBeGreaterThan(150);
-    expect((latestGlobeProps?.labelsData as object[]).length).toBeGreaterThan(40);
-    expect(latestGlobeProps?.labelIncludeDot).toBe(false);
-    expect(latestGlobeProps?.labelsTransitionDuration).toBe(0);
-    expect((latestGlobeProps?.labelColor as () => string)()).toBe(globeColors.countryLabel);
+    expect(latestGlobeProps?.labelsData).toBeUndefined();
     expect((latestGlobeProps?.pointsData as object[])).toHaveLength(stops.length);
     expect((latestGlobeProps?.pathsData as object[])).toHaveLength(legs.length);
     expect(latestGlobeProps?.arcsData).toBeUndefined();
@@ -257,7 +254,7 @@ describe("GlobeCanvas", () => {
       expectedSmoothedPlaybackView,
       0,
     ]);
-    expect((latestGlobeProps?.pathsData as object[])).toHaveLength(legs.length + 1);
+    expect((latestGlobeProps?.pathsData as object[])).toHaveLength(7);
     expect((latestGlobeProps?.pathColor as (obj: object) => string)((latestGlobeProps?.pathsData as object[])[1])).toBe(
       globeColors.groundLegActive
     );
@@ -287,6 +284,7 @@ describe("GlobeCanvas", () => {
     expect((latestGlobeProps?.pointColor as (obj: object) => string)(playingTravelerGlow as object)).not.toBe(
       globeColors.travelerGlow
     );
+    expect(playingPoints.filter((point) => point.kind === "stop")).toHaveLength(4);
 
     rerender(
       <GlobeCanvas

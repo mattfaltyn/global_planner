@@ -212,18 +212,25 @@ describe("GlobeShell", () => {
       expect(screen.getByTestId("dataset-status")).toHaveTextContent("Loaded 9 airports and 7 routes");
     });
 
-    await act(async () => {
-      window.__GLOBAL_PLANNER_TEST_API__?.selectLeg("seed-stop-4__seed-stop-5");
-      window.__GLOBAL_PLANNER_TEST_API__?.selectLeg("missing");
-      window.__GLOBAL_PLANNER_TEST_API__?.selectStop("seed-stop-1");
-      window.__GLOBAL_PLANNER_TEST_API__?.selectStop("missing");
+      await act(async () => {
+        window.__GLOBAL_PLANNER_TEST_API__?.selectLeg("seed-stop-4__seed-stop-5");
+        window.__GLOBAL_PLANNER_TEST_API__?.selectLeg("missing");
+        window.__GLOBAL_PLANNER_TEST_API__?.selectStop("seed-stop-1");
+        window.__GLOBAL_PLANNER_TEST_API__?.selectStop("missing");
       globeProps?.onCameraStateChange?.({
         mode: "overview",
         targetPointOfView: { lat: 20, lng: -32, altitude: 1.62 },
-        currentPointOfView: { lat: 20, lng: -32, altitude: 1.62 },
-        autoFollowSuspended: false,
+          currentPointOfView: { lat: 20, lng: -32, altitude: 1.62 },
+          autoFollowSuspended: false,
+        });
+        globeProps?.onRenderStateChange?.({
+          visibleLabelCount: 0,
+          visiblePathCount: 7,
+          visibleStopCount: 4,
+          playbackStatus: "playing",
+          activeLegIndex: 1,
+        });
       });
-    });
 
     await waitFor(() => {
       const apiState = window.__GLOBAL_PLANNER_TEST_API__?.getState();
@@ -233,6 +240,13 @@ describe("GlobeShell", () => {
       expect(apiState?.activeLegIndex).toBe(0);
       expect(apiState?.tripProgress).toBe(0);
       expect(window.__GLOBAL_PLANNER_TEST_API__?.getCameraState()).not.toBeNull();
+      expect(window.__GLOBAL_PLANNER_TEST_API__?.getRenderState()).toEqual({
+        visibleLabelCount: 0,
+        visiblePathCount: 7,
+        visibleStopCount: 4,
+        playbackStatus: "playing",
+        activeLegIndex: 1,
+      });
     });
 
     view.unmount();

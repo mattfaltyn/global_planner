@@ -5,6 +5,11 @@ import {
   resolveCameraIntent,
 } from "../../lib/globe/camera";
 import { interpolateTravelerPosition } from "../../lib/itinerary/interpolation";
+import {
+  getPlaybackRenderWindow,
+  shouldRenderLegInPlaybackWindow,
+  shouldRenderStopInPlaybackWindow,
+} from "../../lib/state/selectors";
 import styles from "./GlobeCanvas.module.css";
 
 type TestGlobeCanvasProps = {
@@ -23,6 +28,13 @@ type TestGlobeCanvasProps = {
   forceRecenterToken?: number;
   onAutoFollowSuspendedChange?: (suspended: boolean) => void;
   onCameraStateChange?: (snapshot: CameraSnapshot) => void;
+  onRenderStateChange?: (snapshot: {
+    visibleLabelCount: number;
+    visiblePathCount: number;
+    visibleStopCount: number;
+    playbackStatus: "idle" | "playing" | "paused";
+    activeLegIndex: number;
+  }) => void;
   onSelectStop: (stopId: string) => void;
   onSelectLeg: (legId: string) => void;
   onClearSelection: () => void;
@@ -37,6 +49,7 @@ export function TestGlobeCanvas({
   forceRecenterToken = 0,
   onAutoFollowSuspendedChange,
   onCameraStateChange,
+  onRenderStateChange,
   onSelectStop,
   onSelectLeg,
   onClearSelection,
@@ -50,6 +63,37 @@ export function TestGlobeCanvas({
 
     return interpolateTravelerPosition(activeLeg, playback.activeLegProgress);
   }, [legs, playback.activeLegIndex, playback.activeLegProgress]);
+  const renderWindow = useMemo(
+    () => getPlaybackRenderWindow(stops, legs, playback),
+    [legs, playback, stops]
+  );
+  const intent = useMemo(
+    () =>
+      resolveCameraIntent({
+        stops,
+        legs,
+        selection,
+        playback,
+        travelerPoint,
+        isTouchDevice,
+        autoFollowSuspendedUntil: suspended ? Date.now() + 4500 : null,
+        nowMs: Date.now(),
+        currentPointOfView: { lat: 22, lng: -32, altitude: 1.74 },
+      }),
+    [isTouchDevice, legs, playback, selection, stops, suspended, travelerPoint]
+  );
+  const visiblePathCount = useMemo(
+    () =>
+      legs.filter((_, index) => shouldRenderLegInPlaybackWindow(index, renderWindow)).length,
+    [legs, renderWindow]
+  );
+  const visibleStopCount = useMemo(
+    () =>
+      stops.filter((stop, index) =>
+        shouldRenderStopInPlaybackWindow(index, stop.id, selection, renderWindow)
+      ).length,
+    [renderWindow, selection, stops]
+  );
 
   useEffect(() => {
     setSuspended(false);
@@ -57,18 +101,6 @@ export function TestGlobeCanvas({
   }, [forceRecenterToken, onAutoFollowSuspendedChange]);
 
   useEffect(() => {
-    const intent = resolveCameraIntent({
-      stops,
-      legs,
-      selection,
-      playback,
-      travelerPoint,
-      isTouchDevice,
-      autoFollowSuspendedUntil: suspended ? Date.now() + 4500 : null,
-      nowMs: Date.now(),
-      currentPointOfView: { lat: 22, lng: -32, altitude: 1.74 },
-    });
-
     onCameraStateChange?.({
       mode: intent.mode,
       targetPointOfView: intent.target,
@@ -77,13 +109,25 @@ export function TestGlobeCanvas({
     });
   }, [
     isTouchDevice,
-    legs,
     onCameraStateChange,
-    playback,
-    selection,
-    stops,
+    intent,
     suspended,
-    travelerPoint,
+  ]);
+
+  useEffect(() => {
+    onRenderStateChange?.({
+      visibleLabelCount: 0,
+      visiblePathCount,
+      visibleStopCount,
+      playbackStatus: playback.status,
+      activeLegIndex: playback.activeLegIndex,
+    });
+  }, [
+    onRenderStateChange,
+    playback.activeLegIndex,
+    playback.status,
+    visiblePathCount,
+    visibleStopCount,
   ]);
 
   return (

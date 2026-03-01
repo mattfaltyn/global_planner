@@ -1,9 +1,10 @@
 import type { ItineraryLeg, ItineraryStop, PlaybackSpeed, PlaybackState } from "../../lib/data/types";
 import {
   getActiveLegLabel,
+  getPlaybackCalendarProgressPercent,
   getCurrentStopPair,
   getPlaybackDaySummary,
-  getTripProgressPercent,
+  getTripProgressFromCalendarProgress,
 } from "../../lib/state/selectors";
 import styles from "./TripPlaybackBar.module.css";
 
@@ -40,6 +41,7 @@ export function TripPlaybackBar({
 }: TripPlaybackBarProps) {
   const { currentStop, nextStop } = getCurrentStopPair(stops, playback, legs);
   const daySummary = getPlaybackDaySummary(stops, legs, playback);
+  const progressPercent = getPlaybackCalendarProgressPercent(stops, legs, playback);
 
   return (
     <section className={styles.bar} data-testid="trip-playback-bar">
@@ -109,7 +111,7 @@ export function TripPlaybackBar({
 
         <div className={styles.sliderWrap}>
           <label className={styles.sliderLabel} htmlFor="trip-progress">
-            Trip progress: {getTripProgressPercent(playback)}%
+            Trip progress: {progressPercent}%
           </label>
           {daySummary ? (
             <p className={styles.sliderMeta}>
@@ -122,8 +124,17 @@ export function TripPlaybackBar({
             type="range"
             min="0"
             max="100"
-            value={getTripProgressPercent(playback)}
-            onChange={(event) => onProgressChange(Number(event.target.value) / 100)}
+            value={progressPercent}
+            onChange={(event) =>
+              onProgressChange(
+                getTripProgressFromCalendarProgress(
+                  stops,
+                  legs,
+                  playback.speed,
+                  Number(event.target.value) / 100
+                )
+              )
+            }
           />
         </div>
       </div>

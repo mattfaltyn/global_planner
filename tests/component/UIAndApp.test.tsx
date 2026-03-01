@@ -16,6 +16,7 @@ import { SearchBox } from "../../components/ui/SearchBox";
 import { SearchResults } from "../../components/ui/SearchResults";
 import { Tooltip } from "../../components/ui/Tooltip";
 import { TripPlaybackBar } from "../../components/ui/TripPlaybackBar";
+import { getTripProgressFromCalendarProgress } from "../../lib/state/selectors";
 import { createResolvedFixtureItinerary, fixtureAirports } from "../fixtures/dataset";
 
 vi.mock("next/font/local", () => ({
@@ -392,7 +393,9 @@ describe("app shells and UI components", () => {
     expect(onStepPrev).toHaveBeenCalled();
     expect(onStepNext).toHaveBeenCalled();
     expect(onSpeedChange).toHaveBeenCalledWith(2);
-    expect(onProgressChange).toHaveBeenCalledWith(0.25);
+    expect(onProgressChange).toHaveBeenCalledWith(
+      getTripProgressFromCalendarProgress(stops, legs, 1, 0.25)
+    );
     expect(onOpenEdit).toHaveBeenCalled();
     expect(onRecenter).toHaveBeenCalled();
     expect(onUpdateStop).toHaveBeenNthCalledWith(1, unresolvedStop.id, { label: "Porto Base" });

@@ -28,6 +28,14 @@ export {
   serializeItinerarySelectionToQuery,
 };
 
+export type PlaybackRenderWindow = {
+  showAll: boolean;
+  minLegIndex: number;
+  maxLegIndex: number;
+  visibleStopRangeStart: number;
+  visibleStopRangeEnd: number;
+};
+
 export function getSelectedStop(
   selection: ItinerarySelection,
   stops: ItineraryStop[]
@@ -138,7 +146,7 @@ function getSegmentProgress(
   };
 }
 
-export function getPlaybackDaySummary(
+function getPlaybackDateMetrics(
   stops: ItineraryStop[],
   legs: ItineraryLeg[],
   playback: PlaybackState
@@ -182,12 +190,34 @@ export function getPlaybackDaySummary(
     totalDays,
     Math.max(1, Math.floor((currentTimeMs - startMs) / 86_400_000) + 1)
   );
+  const progressRatio =
+    endMs <= startMs ? 1 : Math.max(0, Math.min(1, (currentTimeMs - startMs) / (endMs - startMs)));
 
   return {
     currentDay,
     totalDays,
-    currentDateLabel: formatPlaybackDate(currentTimeMs),
-    rangeLabel: `${formatPlaybackDate(startMs)} -> ${formatPlaybackDate(endMs)}`,
+    currentTimeMs,
+    startMs,
+    endMs,
+    progressRatio,
+  };
+}
+
+export function getPlaybackDaySummary(
+  stops: ItineraryStop[],
+  legs: ItineraryLeg[],
+  playback: PlaybackState
+) {
+  const metrics = getPlaybackDateMetrics(stops, legs, playback);
+  if (!metrics) {
+    return null;
+  }
+
+  return {
+    currentDay: metrics.currentDay,
+    totalDays: metrics.totalDays,
+    currentDateLabel: formatPlaybackDate(metrics.currentTimeMs),
+    rangeLabel: `${formatPlaybackDate(metrics.startMs)} -> ${formatPlaybackDate(metrics.endMs)}`,
   };
 }
 
@@ -208,6 +238,65 @@ export function getTimelineFrame(
 
 export function getTripProgressPercent(playback: PlaybackState) {
   return Math.round(playback.tripProgress * 100);
+}
+
+export function getPlaybackCalendarProgress(
+  stops: ItineraryStop[],
+  legs: ItineraryLeg[],
+  playback: PlaybackState
+) {
+  return getPlaybackDateMetrics(stops, legs, playback)?.progressRatio ?? playback.tripProgress;
+}
+
+export function getPlaybackCalendarProgressPercent(
+  stops: ItineraryStop[],
+  legs: ItineraryLeg[],
+  playback: PlaybackState
+) {
+  return Math.round(getPlaybackCalendarProgress(stops, legs, playback) * 100);
+}
+
+export function getTripProgressFromCalendarProgress(
+  stops: ItineraryStop[],
+  legs: ItineraryLeg[],
+  speed: PlaybackState["speed"],
+  calendarProgress: number
+) {
+  const clampedTarget = Math.max(0, Math.min(1, calendarProgress));
+  const span = getTripDateSpan(stops);
+  if (!span || legs.length === 0) {
+    return clampedTarget;
+  }
+
+  let low = 0;
+  let high = 1;
+  let best = clampedTarget;
+
+  for (let iteration = 0; iteration < 24; iteration += 1) {
+    const mid = (low + high) / 2;
+    const candidate = getPlaybackDateMetrics(stops, legs, {
+      status: "paused",
+      speed,
+      tripProgress: mid,
+      activeLegIndex: 0,
+      activeLegProgress: 0,
+      phase: "travel",
+    });
+    const candidateProgress = candidate?.progressRatio ?? mid;
+
+    best = mid;
+    if (Math.abs(candidateProgress - clampedTarget) < 0.001) {
+      break;
+    }
+
+    if (candidateProgress < clampedTarget) {
+      low = mid;
+    } else {
+      high = mid;
+    }
+  }
+
+  return best;
 }
 
 export function getPlaybackProgressPercent(playback: PlaybackState) {
@@ -251,6 +340,59 @@ export function getCurrentStopPair(
 
 function getLegIndex(legs: ItineraryLeg[], legId: string) {
   return legs.findIndex((leg) => leg.id === legId);
+}
+
+export function getPlaybackRenderWindow(
+  stops: ItineraryStop[],
+  legs: ItineraryLeg[],
+  playback: PlaybackState
+): PlaybackRenderWindow {
+  if (stops.length === 0 || legs.length === 0 || playback.status !== "playing") {
+    return {
+      showAll: true,
+      minLegIndex: 0,
+      maxLegIndex: Math.max(0, legs.length - 1),
+      visibleStopRangeStart: 0,
+      visibleStopRangeEnd: Math.max(0, stops.length - 1),
+    };
+  }
+
+  const activeLegIndex = Math.max(0, Math.min(playback.activeLegIndex, legs.length - 1));
+
+  return {
+    showAll: false,
+    minLegIndex: Math.max(0, activeLegIndex - 4),
+    maxLegIndex: Math.min(legs.length - 1, activeLegIndex + 4),
+    visibleStopRangeStart: Math.max(0, activeLegIndex - 1),
+    visibleStopRangeEnd: Math.min(stops.length - 1, activeLegIndex + 2),
+  };
+}
+
+export function shouldRenderLegInPlaybackWindow(
+  legIndex: number,
+  window: PlaybackRenderWindow
+) {
+  return window.showAll || (legIndex >= window.minLegIndex && legIndex <= window.maxLegIndex);
+}
+
+export function shouldRenderStopInPlaybackWindow(
+  stopIndex: number,
+  stopId: string,
+  selection: ItinerarySelection,
+  window: PlaybackRenderWindow
+) {
+  if (window.showAll) {
+    return true;
+  }
+
+  if (selection?.kind === "stop" && selection.stopId === stopId) {
+    return true;
+  }
+
+  return (
+    stopIndex >= window.visibleStopRangeStart &&
+    stopIndex <= window.visibleStopRangeEnd
+  );
 }
 
 export function getVisibleLegRenderState(

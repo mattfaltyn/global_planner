@@ -1,8 +1,13 @@
-import type { PlaybackSpeed, PlaybackState } from "../../lib/data/types";
-import { getTripProgressPercent } from "../../lib/state/selectors";
+import type { ItineraryLeg, ItineraryStop, PlaybackSpeed, PlaybackState } from "../../lib/data/types";
+import {
+  getPlaybackCalendarProgressPercent,
+  getTripProgressFromCalendarProgress,
+} from "../../lib/state/selectors";
 import styles from "./ItineraryPanel.module.css";
 
 type PlaybackControlsProps = {
+  stops: ItineraryStop[];
+  legs: ItineraryLeg[];
   playback: PlaybackState;
   legCount: number;
   onPlay: () => void;
@@ -15,6 +20,8 @@ type PlaybackControlsProps = {
 };
 
 export function PlaybackControls({
+  stops,
+  legs,
   playback,
   legCount,
   onPlay,
@@ -66,7 +73,7 @@ export function PlaybackControls({
         </select>
       </div>
       <label className={styles.label} htmlFor="playback-progress">
-        Progress: {getTripProgressPercent(playback)}%
+        Progress: {getPlaybackCalendarProgressPercent(stops, legs, playback)}%
       </label>
       <input
         id="playback-progress"
@@ -74,8 +81,17 @@ export function PlaybackControls({
         type="range"
         min="0"
         max="100"
-        value={getTripProgressPercent(playback)}
-        onChange={(event) => onProgressChange(Number(event.target.value) / 100)}
+        value={getPlaybackCalendarProgressPercent(stops, legs, playback)}
+        onChange={(event) =>
+          onProgressChange(
+            getTripProgressFromCalendarProgress(
+              stops,
+              legs,
+              playback.speed,
+              Number(event.target.value) / 100
+            )
+          )
+        }
       />
     </section>
   );

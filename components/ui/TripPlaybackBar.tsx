@@ -2,6 +2,7 @@ import type { ItineraryLeg, ItineraryStop, PlaybackSpeed, PlaybackState } from "
 import {
   getActiveLegLabel,
   getCurrentStopPair,
+  getPlaybackDaySummary,
   getTripProgressPercent,
 } from "../../lib/state/selectors";
 import styles from "./TripPlaybackBar.module.css";
@@ -10,6 +11,7 @@ type TripPlaybackBarProps = {
   stops: ItineraryStop[];
   legs: ItineraryLeg[];
   playback: PlaybackState;
+  showRecenter?: boolean;
   onPlay: () => void;
   onPause: () => void;
   onReset: () => void;
@@ -18,12 +20,14 @@ type TripPlaybackBarProps = {
   onSpeedChange: (speed: PlaybackSpeed) => void;
   onProgressChange: (progress: number) => void;
   onOpenEdit: () => void;
+  onRecenter?: () => void;
 };
 
 export function TripPlaybackBar({
   stops,
   legs,
   playback,
+  showRecenter = false,
   onPlay,
   onPause,
   onReset,
@@ -32,20 +36,34 @@ export function TripPlaybackBar({
   onSpeedChange,
   onProgressChange,
   onOpenEdit,
+  onRecenter = () => undefined,
 }: TripPlaybackBarProps) {
   const { currentStop, nextStop } = getCurrentStopPair(stops, playback, legs);
+  const daySummary = getPlaybackDaySummary(stops, legs, playback);
 
   return (
     <section className={styles.bar} data-testid="trip-playback-bar">
-      <div className={styles.meta}>
-        <p className={styles.kicker}>Trip playback</p>
-        <h2 className={styles.routeLabel}>{getActiveLegLabel(stops, legs, playback)}</h2>
-        <p className={styles.stopLabel}>
-          {currentStop?.label ?? "Start"} {"->"} {nextStop?.label ?? "Finish"}
-          <span className={styles.phase}>
-            {playback.phase === "dwell" ? " · Arrived" : " · En route"}
-          </span>
-        </p>
+      <div className={styles.header}>
+        <div className={styles.meta}>
+          <p className={styles.kicker}>Trip playback</p>
+          <h2 className={styles.routeLabel}>{getActiveLegLabel(stops, legs, playback)}</h2>
+          <p className={styles.stopLabel}>
+            {currentStop?.label ?? "Start"} {"->"} {nextStop?.label ?? "Finish"}
+            <span className={styles.phase}>
+              {playback.phase === "dwell" ? " · Arrived" : " · En route"}
+            </span>
+          </p>
+        </div>
+
+        {daySummary ? (
+          <div className={styles.dayCard}>
+            <p className={styles.dayKicker}>Trip day</p>
+            <p className={styles.dayValue}>
+              Day {daySummary.currentDay} of {daySummary.totalDays}
+            </p>
+            <p className={styles.dayDate}>{daySummary.currentDateLabel}</p>
+          </div>
+        ) : null}
       </div>
 
       <div className={styles.controls}>
@@ -78,12 +96,26 @@ export function TripPlaybackBar({
           <button type="button" className={styles.secondaryButton} onClick={onOpenEdit}>
             Edit trip
           </button>
+          {showRecenter ? (
+            <button
+              type="button"
+              className={styles.secondaryButton}
+              onClick={onRecenter}
+            >
+              Recenter
+            </button>
+          ) : null}
         </div>
 
         <div className={styles.sliderWrap}>
           <label className={styles.sliderLabel} htmlFor="trip-progress">
             Trip progress: {getTripProgressPercent(playback)}%
           </label>
+          {daySummary ? (
+            <p className={styles.sliderMeta}>
+              {daySummary.currentDateLabel} · Day {daySummary.currentDay}/{daySummary.totalDays}
+            </p>
+          ) : null}
           <input
             id="trip-progress"
             className={styles.slider}

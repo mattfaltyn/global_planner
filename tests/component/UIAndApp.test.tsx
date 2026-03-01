@@ -1,5 +1,5 @@
 import React from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -228,6 +228,7 @@ describe("app shells and UI components", () => {
     const { stops, legs } = createResolvedFixtureItinerary();
     const onSetMode = vi.fn();
     const onToggleCollapsed = vi.fn();
+    const onRecenter = vi.fn();
 
     const { rerender } = render(
       <ItineraryDock
@@ -242,8 +243,10 @@ describe("app shells and UI components", () => {
         mode="playback"
         collapsed={false}
         isTouchDevice={false}
+        showRecenter
         onSetMode={onSetMode}
         onToggleCollapsed={onToggleCollapsed}
+        onRecenter={onRecenter}
         onSelectStop={() => undefined}
         onMoveStopUp={() => undefined}
         onMoveStopDown={() => undefined}
@@ -260,6 +263,8 @@ describe("app shells and UI components", () => {
     expect(screen.getByText("Current route")).toBeInTheDocument();
     expect(screen.getByText("Lisbon to Barcelona")).toBeInTheDocument();
     expect(screen.getByText("Feb 20, 2026 to Apr 10, 2026")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Recenter" }));
+    expect(onRecenter).toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "Edit" }));
     expect(onSetMode).toHaveBeenCalledWith("edit");
     await user.click(screen.getByRole("button", { name: "Collapse" }));
@@ -312,6 +317,7 @@ describe("app shells and UI components", () => {
     const onSpeedChange = vi.fn();
     const onProgressChange = vi.fn();
     const onOpenEdit = vi.fn();
+    const onRecenter = vi.fn();
 
     render(
       <>
@@ -319,6 +325,7 @@ describe("app shells and UI components", () => {
           stops={stops}
           legs={legs}
           playback={createPlayback()}
+          showRecenter
           onPlay={onPlay}
           onPause={() => undefined}
           onReset={onReset}
@@ -327,6 +334,7 @@ describe("app shells and UI components", () => {
           onSpeedChange={onSpeedChange}
           onProgressChange={onProgressChange}
           onOpenEdit={onOpenEdit}
+          onRecenter={onRecenter}
         />
         <ItineraryPanel
           stops={[stops[0], unresolvedStop]}
@@ -352,6 +360,7 @@ describe("app shells and UI components", () => {
     await user.selectOptions(screen.getByLabelText("Playback speed"), "2");
     fireEvent.change(screen.getByLabelText(/Trip progress:/), { target: { value: "25" } });
     await user.click(screen.getByRole("button", { name: "Edit trip" }));
+    await user.click(screen.getByRole("button", { name: "Recenter" }));
     fireEvent.change(screen.getByLabelText("Label"), { target: { value: "Porto Base" } });
     fireEvent.change(screen.getByLabelText("Arrival date"), {
       target: { value: "2026-02-22" },
@@ -370,8 +379,12 @@ describe("app shells and UI components", () => {
     });
     await user.click(screen.getByRole("button", { name: "Replace anchor with search" }));
 
-    expect(screen.getByText("Trip playback")).toBeInTheDocument();
-    expect(screen.getByText("Vancouver to Porto")).toBeInTheDocument();
+    const playbackBar = screen.getByTestId("trip-playback-bar");
+
+    expect(within(playbackBar).getByText("Trip playback")).toBeInTheDocument();
+    expect(within(playbackBar).getByText("Vancouver to Porto")).toBeInTheDocument();
+    expect(within(playbackBar).getByText("Day 1 of 50")).toBeInTheDocument();
+    expect(within(playbackBar).getByText("Fri, Feb 20, 2026")).toBeInTheDocument();
     expect(screen.getByText("This stop is unresolved. Use search to replace its anchor airport.")).toBeInTheDocument();
     expect(screen.getByText("Unresolved")).toBeInTheDocument();
     expect(onPlay).toHaveBeenCalled();
@@ -381,6 +394,7 @@ describe("app shells and UI components", () => {
     expect(onSpeedChange).toHaveBeenCalledWith(2);
     expect(onProgressChange).toHaveBeenCalledWith(0.25);
     expect(onOpenEdit).toHaveBeenCalled();
+    expect(onRecenter).toHaveBeenCalled();
     expect(onUpdateStop).toHaveBeenNthCalledWith(1, unresolvedStop.id, { label: "Porto Base" });
     expect(onUpdateStop).toHaveBeenNthCalledWith(2, unresolvedStop.id, {
       arrivalDate: "2026-02-22",

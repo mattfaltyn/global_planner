@@ -1,10 +1,17 @@
-import type { ItineraryLeg, ItinerarySelection, ItineraryStop } from "../../lib/data/types";
+import { useEffect, useMemo, useState } from "react";
+import type { ItineraryLeg, ItinerarySelection, ItineraryStop, PathPoint } from "../../lib/data/types";
+import {
+  type CameraSnapshot,
+  resolveCameraIntent,
+} from "../../lib/globe/camera";
+import { interpolateTravelerPosition } from "../../lib/itinerary/interpolation";
 import styles from "./GlobeCanvas.module.css";
 
 type TestGlobeCanvasProps = {
   stops: ItineraryStop[];
   legs: ItineraryLeg[];
   selection: ItinerarySelection;
+  isTouchDevice?: boolean;
   playback: {
     status: "idle" | "playing" | "paused";
     speed: 0.5 | 1 | 2 | 4;
@@ -13,6 +20,9 @@ type TestGlobeCanvasProps = {
     activeLegProgress: number;
     phase: "travel" | "dwell";
   };
+  forceRecenterToken?: number;
+  onAutoFollowSuspendedChange?: (suspended: boolean) => void;
+  onCameraStateChange?: (snapshot: CameraSnapshot) => void;
   onSelectStop: (stopId: string) => void;
   onSelectLeg: (legId: string) => void;
   onClearSelection: () => void;
@@ -22,11 +32,60 @@ export function TestGlobeCanvas({
   stops,
   legs,
   selection,
+  isTouchDevice = false,
   playback,
+  forceRecenterToken = 0,
+  onAutoFollowSuspendedChange,
+  onCameraStateChange,
   onSelectStop,
   onSelectLeg,
   onClearSelection,
 }: TestGlobeCanvasProps) {
+  const [suspended, setSuspended] = useState(false);
+  const travelerPoint = useMemo<PathPoint | null>(() => {
+    const activeLeg = legs[playback.activeLegIndex] ?? null;
+    if (!activeLeg) {
+      return null;
+    }
+
+    return interpolateTravelerPosition(activeLeg, playback.activeLegProgress);
+  }, [legs, playback.activeLegIndex, playback.activeLegProgress]);
+
+  useEffect(() => {
+    setSuspended(false);
+    onAutoFollowSuspendedChange?.(false);
+  }, [forceRecenterToken, onAutoFollowSuspendedChange]);
+
+  useEffect(() => {
+    const intent = resolveCameraIntent({
+      stops,
+      legs,
+      selection,
+      playback,
+      travelerPoint,
+      isTouchDevice,
+      autoFollowSuspendedUntil: suspended ? Date.now() + 4500 : null,
+      nowMs: Date.now(),
+      currentPointOfView: { lat: 22, lng: -32, altitude: 1.74 },
+    });
+
+    onCameraStateChange?.({
+      mode: intent.mode,
+      targetPointOfView: intent.target,
+      currentPointOfView: intent.target,
+      autoFollowSuspended: suspended,
+    });
+  }, [
+    isTouchDevice,
+    legs,
+    onCameraStateChange,
+    playback,
+    selection,
+    stops,
+    suspended,
+    travelerPoint,
+  ]);
+
   return (
     <div className={styles.canvas} data-testid="globe-canvas">
       <div
@@ -62,6 +121,15 @@ export function TestGlobeCanvas({
           ))}
           <button type="button" onClick={onClearSelection}>
             Clear selection
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setSuspended(true);
+              onAutoFollowSuspendedChange?.(true);
+            }}
+          >
+            Simulate manual camera
           </button>
         </div>
       </div>

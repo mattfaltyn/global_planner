@@ -10,6 +10,13 @@
   box-shadow: var(--shadow);
 }
 
+.header {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+}
+
 .meta {
   display: grid;
   gap: 4px;
@@ -17,7 +24,10 @@
 
 .kicker,
 .stopLabel,
-.sliderLabel {
+.sliderLabel,
+.sliderMeta,
+.dayKicker,
+.dayDate {
   margin: 0;
   color: var(--muted);
 }
@@ -33,6 +43,36 @@
   margin: 0;
   font-size: 1.25rem;
   font-family: var(--font-display), Georgia, serif;
+}
+
+.dayCard {
+  min-width: 214px;
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.05);
+  justify-items: end;
+  text-align: right;
+}
+
+.dayKicker {
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.68rem;
+}
+
+.dayValue {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.dayDate {
+  font-size: 0.9rem;
 }
 
 .phase {
@@ -79,11 +119,15 @@
 
 .sliderWrap {
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 
 .slider {
   width: 100%;
+}
+
+.sliderMeta {
+  font-size: 0.88rem;
 }
 
 @media (max-width: 960px) {
@@ -95,5 +139,15 @@
 
   .routeLabel {
     font-size: 1.05rem;
+  }
+
+  .header {
+    grid-template-columns: 1fr;
+  }
+
+  .dayCard {
+    min-width: 0;
+    justify-items: start;
+    text-align: left;
   }
 }

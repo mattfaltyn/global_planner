@@ -2,16 +2,20 @@
 
 import dynamic from "next/dynamic";
 import {
+  useCallback,
   startTransition,
   useDeferredValue,
   useEffect,
   useMemo,
   useReducer,
+  useRef,
+  useState,
 } from "react";
 import { formatDistance } from "../../lib/data/formatters";
 import { loadDataset } from "../../lib/data/loadDataset";
 import { searchAirports } from "../../lib/data/search";
 import type { HoverState, ItineraryLeg, ItineraryStop } from "../../lib/data/types";
+import type { CameraSnapshot } from "../../lib/globe/camera";
 import { resolveSeededItinerary } from "../../lib/itinerary/resolveStops";
 import { appReducer, initialAppState } from "../../lib/state/appState";
 import {
@@ -49,6 +53,7 @@ declare global {
         tripProgress: number;
         activeLegIndex: number;
       };
+      getCameraState: () => CameraSnapshot | null;
     };
   }
 }
@@ -121,6 +126,12 @@ export function getHoverContent(
 
 export function GlobeShell() {
   const [state, dispatch] = useReducer(appReducer, initialAppState);
+  const [autoFollowSuspended, setAutoFollowSuspended] = useState(false);
+  const [forceRecenterToken, setForceRecenterToken] = useState(0);
+  const [cameraState, setCameraState] = useState<CameraSnapshot | null>(null);
+  const playbackStatusRef = useRef(state.playback.status);
+  const playbackFrameIdRef = useRef<number | null>(null);
+  const playbackLastTickRef = useRef<number | null>(null);
   const deferredSearchQuery = useDeferredValue(state.searchQuery);
   const dataset = state.loadState.status === "ready" ? state.loadState.dataset : null;
   const searchResults =
@@ -137,6 +148,25 @@ export function GlobeShell() {
     () => getTimelineSegments(state.itinerary.legs),
     [state.itinerary.legs]
   );
+  const handleCameraStateChange = useCallback((snapshot: CameraSnapshot) => {
+    setCameraState((previous) => {
+      if (
+        previous &&
+        previous.mode === snapshot.mode &&
+        previous.autoFollowSuspended === snapshot.autoFollowSuspended &&
+        previous.targetPointOfView.lat === snapshot.targetPointOfView.lat &&
+        previous.targetPointOfView.lng === snapshot.targetPointOfView.lng &&
+        previous.targetPointOfView.altitude === snapshot.targetPointOfView.altitude &&
+        previous.currentPointOfView.lat === snapshot.currentPointOfView.lat &&
+        previous.currentPointOfView.lng === snapshot.currentPointOfView.lng &&
+        previous.currentPointOfView.altitude === snapshot.currentPointOfView.altitude
+      ) {
+        return previous;
+      }
+
+      return snapshot;
+    });
+  }, []);
 
   useEffect(() => {
     dispatch({ type: "dataset/loading" });
@@ -235,22 +265,51 @@ export function GlobeShell() {
   ]);
 
   useEffect(() => {
+    playbackStatusRef.current = state.playback.status;
+  }, [state.playback.status]);
+
+  useEffect(() => {
     if (state.playback.status !== "playing") {
+      if (playbackFrameIdRef.current !== null) {
+        window.cancelAnimationFrame(playbackFrameIdRef.current);
+        playbackFrameIdRef.current = null;
+      }
+      playbackLastTickRef.current = null;
       return;
     }
 
-    let frameId = 0;
-    let lastTick = performance.now();
+    let cancelled = false;
 
     const frame = (now: number) => {
-      const deltaMs = now - lastTick;
-      lastTick = now;
-      dispatch({ type: "playback/advance-frame", deltaMs });
-      frameId = window.requestAnimationFrame(frame);
+      if (cancelled || playbackStatusRef.current !== "playing") {
+        playbackFrameIdRef.current = null;
+        playbackLastTickRef.current = null;
+        return;
+      }
+
+      const lastTick = playbackLastTickRef.current ?? now;
+      const deltaMs = Math.max(0, Math.min(64, now - lastTick));
+      playbackLastTickRef.current = now;
+
+      if (deltaMs > 0) {
+        dispatch({ type: "playback/advance-frame", deltaMs });
+      }
+
+      playbackFrameIdRef.current = window.requestAnimationFrame(frame);
     };
 
-    frameId = window.requestAnimationFrame(frame);
-    return () => window.cancelAnimationFrame(frameId);
+    if (playbackFrameIdRef.current === null) {
+      playbackFrameIdRef.current = window.requestAnimationFrame(frame);
+    }
+
+    return () => {
+      cancelled = true;
+      if (playbackFrameIdRef.current !== null) {
+        window.cancelAnimationFrame(playbackFrameIdRef.current);
+        playbackFrameIdRef.current = null;
+      }
+      playbackLastTickRef.current = null;
+    };
   }, [state.playback.status]);
 
   useEffect(() => {
@@ -281,12 +340,13 @@ export function GlobeShell() {
         tripProgress: state.playback.tripProgress,
         activeLegIndex: state.playback.activeLegIndex,
       }),
+      getCameraState: () => cameraState,
     };
 
     return () => {
       delete window.__GLOBAL_PLANNER_TEST_API__;
     };
-  }, [state.itinerary.legs, state.itinerary.stops, state.playback, state.selection]);
+  }, [cameraState, state.itinerary.legs, state.itinerary.stops, state.playback, state.selection]);
 
   if (state.loadState.status === "error") {
     return <ErrorState message={state.loadState.message} onRetry={() => window.location.reload()} />;
@@ -302,7 +362,11 @@ export function GlobeShell() {
             legs={state.itinerary.legs}
             selection={state.selection}
             playback={state.playback}
+            isTouchDevice={state.isTouchDevice}
             enableHover={!state.isTouchDevice}
+            forceRecenterToken={forceRecenterToken}
+            onAutoFollowSuspendedChange={setAutoFollowSuspended}
+            onCameraStateChange={handleCameraStateChange}
             onHoverStop={(stopId, x, y) =>
               dispatch({ type: "hover/stop", stopId, x, y })
             }
@@ -346,8 +410,13 @@ export function GlobeShell() {
               mode={state.dockMode}
               collapsed={state.dockCollapsed}
               isTouchDevice={state.isTouchDevice}
+              showRecenter={autoFollowSuspended && state.playback.status === "playing"}
               onSetMode={(mode) => dispatch({ type: "dock/set-mode", mode })}
               onToggleCollapsed={() => dispatch({ type: "dock/toggle-collapsed" })}
+              onRecenter={() => {
+                setAutoFollowSuspended(false);
+                setForceRecenterToken((token) => token + 1);
+              }}
               onSelectStop={(stopId) =>
                 dispatch({ type: "itinerary/select-stop", stopId })
               }
@@ -386,6 +455,7 @@ export function GlobeShell() {
               stops={state.itinerary.stops}
               legs={state.itinerary.legs}
               playback={state.playback}
+              showRecenter={autoFollowSuspended && state.playback.status === "playing"}
               onPlay={() => dispatch({ type: "playback/play" })}
               onPause={() => dispatch({ type: "playback/pause" })}
               onReset={() => dispatch({ type: "playback/reset" })}
@@ -396,6 +466,10 @@ export function GlobeShell() {
                 dispatch({ type: "playback/set-trip-progress", progress })
               }
               onOpenEdit={() => dispatch({ type: "dock/set-mode", mode: "edit" })}
+              onRecenter={() => {
+                setAutoFollowSuspended(false);
+                setForceRecenterToken((token) => token + 1);
+              }}
             />
           </div>
 

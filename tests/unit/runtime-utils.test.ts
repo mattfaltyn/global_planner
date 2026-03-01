@@ -6,9 +6,21 @@ import {
   getAirportPointOfView,
   getBufferedLegPointOfView,
   getFlyDurationMs,
+  getLegFocusCameraIntent,
   getLegPointOfView,
+  getOverviewCameraIntent,
   getOverviewPointOfView,
+  getPlaybackFollowCameraIntent,
+  getPlaybackSmoothingProfile,
+  getPlaybackSmoothingVelocity,
+  getPlaybackFollowPointOfView,
+  getStopFocusCameraIntent,
   getStopContextPointOfView,
+  getVelocityAdjustedPlaybackSmoothingProfile,
+  interpolatePlaybackPointOfView,
+  interpolatePointOfView,
+  resolveCameraIntent,
+  shouldApplyPointOfViewUpdate,
 } from "../../lib/globe/camera";
 import { globeColors } from "../../lib/globe/colors";
 import { getRouteAltitude, getRouteStroke } from "../../lib/globe/routeGeometry";
@@ -35,7 +47,7 @@ describe("runtime config and utility modules", () => {
     expect(getAirportPointOfView(10, 20)).toEqual({
       lat: 10,
       lng: 20,
-      altitude: 1.6,
+      altitude: 0.76,
     });
     expect(getFlyDurationMs(true)).toBe(450);
     expect(getFlyDurationMs(false)).toBe(900);
@@ -45,14 +57,14 @@ describe("runtime config and utility modules", () => {
     );
     expect(transatlanticLegPointOfView.lat).toBeCloseTo(45.2214);
     expect(transatlanticLegPointOfView.lng).toBeCloseTo(-65.9303);
-    expect(transatlanticLegPointOfView.altitude).toBe(2.35);
+    expect(transatlanticLegPointOfView.altitude).toBe(1.42);
     const bufferedLegPointOfView = getBufferedLegPointOfView(
       { lat: 49.1947, lon: -123.1792 },
       { lat: 41.2481, lon: -8.6814 }
     );
     expect(bufferedLegPointOfView.lat).toBeCloseTo(transatlanticLegPointOfView.lat);
     expect(bufferedLegPointOfView.lng).toBeCloseTo(transatlanticLegPointOfView.lng);
-    expect(bufferedLegPointOfView.altitude).toBe(2.71);
+    expect(bufferedLegPointOfView.altitude).toBeCloseTo(1.54);
 
     const stopContextPointOfView = getStopContextPointOfView(
       { lat: 49.1947, lon: -123.1792 },
@@ -60,20 +72,200 @@ describe("runtime config and utility modules", () => {
     );
     expect(stopContextPointOfView.lat).toBeCloseTo(46.5458, 3);
     expect(stopContextPointOfView.lng).toBeCloseTo(-93.3236, 3);
-    expect(stopContextPointOfView.altitude).toBe(2.9);
+    expect(stopContextPointOfView.altitude).toBe(1.02);
     expect(
       getLegPointOfView(
         { lat: null, lon: null },
         { lat: 41.2481, lon: -8.6814 }
       )
     ).toEqual(getOverviewPointOfView([{ lat: null, lon: null }, { lat: 41.2481, lon: -8.6814 }]));
-    expect(getOverviewPointOfView([])).toEqual({ lat: 22, lng: -32, altitude: 2.05 });
+    expect(getOverviewPointOfView([])).toEqual({ lat: 22, lng: -32, altitude: 1.32 });
     expect(
       getOverviewPointOfView([
         { kind: "stop" as const, stopId: "a", lat: 10, lon: 20 },
         { kind: "stop" as const, stopId: "b", lat: 30, lon: 40 },
       ])
-    ).toEqual({ lat: 20, lng: 30, altitude: 1.6 });
+    ).toEqual({ lat: 20, lng: 30, altitude: 1.32 });
+    const playbackFollowPointOfView = getPlaybackFollowPointOfView(
+      { lat: 44, lon: -40 },
+      { lat: 41.2481, lon: -8.6814 },
+      "air",
+      7490,
+      "travel"
+    );
+    expect(playbackFollowPointOfView.lat).toBeCloseTo(43.284506);
+    expect(playbackFollowPointOfView.lng).toBeCloseTo(-31.85716400000001);
+    expect(playbackFollowPointOfView.altitude).toBe(1.34);
+    const groundPlaybackFollowPointOfView = getPlaybackFollowPointOfView(
+      { lat: 38, lon: -9.5 },
+      { lat: 37.0144, lon: -7.9659 },
+      "ground",
+      216,
+      "travel"
+    );
+    expect(groundPlaybackFollowPointOfView.lat).toBeCloseTo(37.822592);
+    expect(groundPlaybackFollowPointOfView.lng).toBeCloseTo(-9.223862);
+    expect(groundPlaybackFollowPointOfView.altitude).toBe(0.56);
+    const lateGroundPlaybackFollowPointOfView = getPlaybackFollowPointOfView(
+      { lat: 37.5, lon: -8.2 },
+      { lat: 37.0144, lon: -7.9659 },
+      "ground",
+      216,
+      "travel",
+      0.75
+    );
+    expect(lateGroundPlaybackFollowPointOfView.lat).toBeCloseTo(37.376172);
+    expect(lateGroundPlaybackFollowPointOfView.lng).toBeCloseTo(-8.1403045);
+    expect(lateGroundPlaybackFollowPointOfView.altitude).toBe(0.56);
+    expect(
+      getPlaybackFollowPointOfView(
+        { lat: 37.5, lon: -8.2 },
+        { lat: 37.0144, lon: -7.9659 },
+        "ground",
+        216,
+        "dwell"
+      )
+      ).toEqual({
+      lat: 37.0144,
+      lng: -7.9659,
+      altitude: 0.56,
+    });
+    const { stops, legs } = createResolvedFixtureItinerary();
+    expect(getOverviewCameraIntent(stops).target.altitude).toBe(1.62);
+    expect(
+      getStopFocusCameraIntent(stops[1], [stops[0], stops[2]], [legs[0], legs[1]]).target
+        .altitude
+    ).toBe(1.02);
+    expect(getLegFocusCameraIntent(legs[2], stops[2], stops[3]).target.altitude).toBe(0.86);
+    expect(
+      getPlaybackFollowCameraIntent(
+        legs[0],
+        legs[0].pathPoints[10],
+        stops[1],
+        "travel"
+      ).target.altitude
+    ).toBe(1.34);
+    expect(
+      getPlaybackFollowCameraIntent(
+        legs[1],
+        legs[1].pathPoints[8],
+        stops[2],
+        "travel"
+      ).target.altitude
+    ).toBe(0.56);
+    expect(
+      resolveCameraIntent({
+        stops,
+        legs,
+        selection: null,
+        playback: {
+          status: "playing",
+          speed: 1,
+          tripProgress: 0.2,
+          activeLegIndex: 0,
+          activeLegProgress: 0.3,
+          phase: "travel",
+        },
+        travelerPoint: legs[0].pathPoints[12],
+        isTouchDevice: false,
+        autoFollowSuspendedUntil: null,
+        nowMs: 1000,
+        currentPointOfView: { lat: 0, lng: 0, altitude: 2 },
+      }).mode
+    ).toBe("playback-follow");
+    expect(
+      resolveCameraIntent({
+        stops,
+        legs,
+        selection: null,
+        playback: {
+          status: "playing",
+          speed: 1,
+          tripProgress: 0.2,
+          activeLegIndex: 0,
+          activeLegProgress: 0.3,
+          phase: "travel",
+        },
+        travelerPoint: legs[0].pathPoints[12],
+        isTouchDevice: false,
+        autoFollowSuspendedUntil: 5000,
+        nowMs: 1000,
+        currentPointOfView: { lat: 10, lng: 20, altitude: 1.5 },
+      }).mode
+    ).toBe("manual-override");
+    expect(
+      shouldApplyPointOfViewUpdate(
+        { lat: 10, lng: 20, altitude: 1.5 },
+        { lat: 10.01, lng: 20.01, altitude: 1.51 }
+      )
+    ).toBe(false);
+    expect(
+      shouldApplyPointOfViewUpdate(
+        { lat: 10, lng: 20, altitude: 1.5 },
+        { lat: 10.2, lng: 20.3, altitude: 1.7 }
+      )
+    ).toBe(true);
+    expect(getPlaybackSmoothingProfile("ground", "travel")).toEqual({
+      latLngFactor: 0.34,
+      altitudeFactor: 0.14,
+    });
+    expect(
+      getPlaybackSmoothingVelocity(
+        { lat: 10, lng: 20, altitude: 1.5 },
+        { lat: 10.4, lng: 20.2, altitude: 1.35 }
+      )
+    ).toMatchObject({
+      angularDelta: 0.40000000000000036,
+      altitudeDelta: 0.1499999999999999,
+    });
+    expect(
+      getVelocityAdjustedPlaybackSmoothingProfile(
+        getPlaybackSmoothingProfile("ground", "travel"),
+        { angularDelta: 0.05, altitudeDelta: 0.01 },
+        "ground"
+      )
+    ).toEqual({
+      latLngFactor: 0.250512,
+      altitudeFactor: 0.11676,
+    });
+    expect(
+      getVelocityAdjustedPlaybackSmoothingProfile(
+        getPlaybackSmoothingProfile("ground", "travel"),
+        { angularDelta: 1.4, altitudeDelta: 0.24 },
+        "ground"
+      )
+    ).toEqual({
+      latLngFactor: 0.3876,
+      altitudeFactor: 0.15400000000000003,
+    });
+    expect(
+      getVelocityAdjustedPlaybackSmoothingProfile(
+        getPlaybackSmoothingProfile("air", "travel"),
+        { angularDelta: 2.4, altitudeDelta: 0.3 },
+        "air"
+      )
+    ).toEqual({
+      latLngFactor: 0.2304,
+      altitudeFactor: 0.1368,
+    });
+    expect(
+      interpolatePlaybackPointOfView(
+        { lat: 10, lng: 20, altitude: 1.5 },
+        { lat: 20, lng: 30, altitude: 1.1 },
+        getPlaybackSmoothingProfile("ground", "travel")
+      )
+    ).toMatchObject({
+      lat: 13.4,
+      altitude: 1.444,
+    });
+    const interpolatedPointOfView = interpolatePointOfView(
+      { lat: 40, lng: 170, altitude: 2 },
+      { lat: 50, lng: -170, altitude: 1 },
+      0.5
+    );
+    expect(interpolatedPointOfView.lat).toBe(45);
+    expect(interpolatedPointOfView.lng).toBe(-180);
+    expect(interpolatedPointOfView.altitude).toBe(1.5);
     expect(globeColors.airLegSelected).toBe("rgba(142, 251, 255, 0.96)");
     expect(getRouteAltitude(100)).toBeCloseTo(0.04);
     expect(getRouteAltitude(30000)).toBeCloseTo(0.2);

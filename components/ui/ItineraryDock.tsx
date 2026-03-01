@@ -21,8 +21,10 @@ type ItineraryDockProps = {
   mode: "playback" | "edit";
   collapsed: boolean;
   isTouchDevice: boolean;
+  showRecenter?: boolean;
   onSetMode: (mode: "playback" | "edit") => void;
   onToggleCollapsed: () => void;
+  onRecenter?: () => void;
   onSelectStop: (stopId: string) => void;
   onMoveStopUp: (stopId: string) => void;
   onMoveStopDown: (stopId: string) => void;
@@ -54,8 +56,10 @@ export function ItineraryDock({
   mode,
   collapsed,
   isTouchDevice,
+  showRecenter = false,
   onSetMode,
   onToggleCollapsed,
+  onRecenter = () => undefined,
   onSelectStop,
   onMoveStopUp,
   onMoveStopDown,
@@ -148,6 +152,15 @@ export function ItineraryDock({
             <p className={styles.muted}>
               {dateSpan ? formatDateSpan(dateSpan.start, dateSpan.end) : "Dates unavailable"}
             </p>
+            {showRecenter ? (
+              <button
+                type="button"
+                className={styles.toggleButton}
+                onClick={onRecenter}
+              >
+                Recenter
+              </button>
+            ) : null}
           </div>
           <div className={styles.section}>
             <h3 className={styles.sectionTitle}>Selected</h3>

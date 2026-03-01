@@ -17,5 +17,10 @@ export const globeColors = {
   groundLegContext: "rgba(255, 213, 155, 0.3)",
   groundLegActive: "rgba(255, 213, 155, 0.82)",
   groundLegSelected: "rgba(255, 184, 112, 0.96)",
-  traveler: "#fff7cf",
+  countryLabel: "rgba(226, 242, 255, 0.72)",
+  traveler: "#fffef6",
+  travelerGlow: "rgba(255, 210, 122, 0.2)",
+  travelerHalo: "rgba(255, 132, 76, 0.44)",
+  travelerAccent: "#ffe58f",
+  travelerTrail: "rgba(255, 212, 153, 0.52)",
 };

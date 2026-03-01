@@ -6,7 +6,7 @@ import type {
   RenderLegState,
 } from "../data/types";
 import {
-  getOverviewPointOfView,
+  getOverviewCameraIntent,
   type GlobePointOfView,
 } from "../globe/camera";
 import {
@@ -16,6 +16,7 @@ import {
 import {
   buildTimelineSegments,
   getTimelineFrameFromTripProgress,
+  getTotalTimelineDurationMs,
   getTripProgressForLegEnd,
   getTripProgressForLegStart,
   type TimelineFrame,
@@ -75,6 +76,118 @@ export function getTripDateSpan(stops: ItineraryStop[]) {
   return {
     start: departureDates[0],
     end: departureDates[departureDates.length - 1],
+  };
+}
+
+function toUtcDateMs(value: string) {
+  return new Date(`${value}T00:00:00Z`).getTime();
+}
+
+function formatPlaybackDate(timeMs: number) {
+  return new Intl.DateTimeFormat("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(new Date(timeMs));
+}
+
+function getStopBoundaryDate(
+  stop: ItineraryStop | null,
+  boundary: "arrival" | "departure"
+) {
+  if (!stop) {
+    return null;
+  }
+
+  return boundary === "arrival"
+    ? stop.arrivalDate ?? stop.departureDate
+    : stop.departureDate ?? stop.arrivalDate;
+}
+
+function getSegmentProgress(
+  segments: TimelineSegment[],
+  tripProgress: number,
+  speed: PlaybackState["speed"]
+) {
+  const clampedProgress = Math.max(0, Math.min(1, tripProgress));
+  const totalDurationMs = getTotalTimelineDurationMs(segments, speed);
+  const targetElapsedMs = clampedProgress * totalDurationMs;
+  let traversedMs = 0;
+
+  for (const segment of segments) {
+    const segmentDurationMs = segment.durationMs / speed;
+    const segmentEndMs = traversedMs + segmentDurationMs;
+
+    if (targetElapsedMs <= segmentEndMs || segment === segments[segments.length - 1]) {
+      return {
+        segment,
+        progress:
+          segmentDurationMs === 0
+            ? 1
+            : Math.max(0, Math.min(1, (targetElapsedMs - traversedMs) / segmentDurationMs)),
+      };
+    }
+
+    traversedMs = segmentEndMs;
+  }
+
+  return {
+    segment: segments[segments.length - 1],
+    progress: 1,
+  };
+}
+
+export function getPlaybackDaySummary(
+  stops: ItineraryStop[],
+  legs: ItineraryLeg[],
+  playback: PlaybackState
+) {
+  const span = getTripDateSpan(stops);
+  if (!span) {
+    return null;
+  }
+
+  const startMs = toUtcDateMs(span.start);
+  const endMs = toUtcDateMs(span.end);
+  const totalDays = Math.max(1, Math.floor((endMs - startMs) / 86_400_000) + 1);
+  const segments = buildTimelineSegments(legs);
+  const { segment, progress } = getSegmentProgress(
+    segments,
+    playback.tripProgress,
+    playback.speed
+  );
+  const activeLeg = legs[segment?.legIndex ?? playback.activeLegIndex] ?? null;
+  const fromStop = activeLeg
+    ? stops.find((stop) => stop.id === activeLeg.fromStopId) ?? null
+    : null;
+  const toStop = activeLeg
+    ? stops.find((stop) => stop.id === activeLeg.toStopId) ?? null
+    : null;
+
+  const segmentStart = segment?.kind === "dwell"
+    ? getStopBoundaryDate(toStop, "arrival")
+    : getStopBoundaryDate(fromStop, "departure");
+  const segmentEnd = segment?.kind === "dwell"
+    ? getStopBoundaryDate(toStop, "departure")
+    : getStopBoundaryDate(toStop, "arrival");
+  const segmentStartMs = toUtcDateMs(segmentStart ?? span.start);
+  const segmentEndMs = toUtcDateMs(segmentEnd ?? segmentStart ?? span.end);
+  const currentTimeMs =
+    segmentEndMs <= segmentStartMs
+      ? segmentStartMs
+      : segmentStartMs +
+        Math.floor((segmentEndMs - segmentStartMs) * Math.max(0, Math.min(1, progress)));
+  const currentDay = Math.min(
+    totalDays,
+    Math.max(1, Math.floor((currentTimeMs - startMs) / 86_400_000) + 1)
+  );
+
+  return {
+    currentDay,
+    totalDays,
+    currentDateLabel: formatPlaybackDate(currentTimeMs),
+    rangeLabel: `${formatPlaybackDate(startMs)} -> ${formatPlaybackDate(endMs)}`,
   };
 }
 
@@ -183,19 +296,7 @@ function stopsIndexFromLegsSelection(legs: ItineraryLeg[], stopId: string) {
 export function getItineraryFitPointOfView(
   stops: ItineraryStop[]
 ): GlobePointOfView {
-  const visibleStops = stops
-    .filter(
-      (stop): stop is ItineraryStop & { lat: number; lon: number } =>
-        stop.lat !== null && stop.lon !== null
-    )
-    .map((stop) => ({ lat: stop.lat, lon: stop.lon }));
-
-  const overview = getOverviewPointOfView(visibleStops);
-  return {
-    lat: overview.lat,
-    lng: overview.lng - 10,
-    altitude: Math.max(2.55, overview.altitude + 0.55),
-  };
+  return getOverviewCameraIntent(stops).target;
 }
 
 export function getTimelineNavigationProgress(

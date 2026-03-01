@@ -29,6 +29,7 @@ import {
 import {
   getItineraryFitPointOfView,
   getLegByIndex,
+  getPlaybackDaySummary,
   getPlaybackProgressPercent,
   getSelectedLeg,
   getSelectedStop,
@@ -237,12 +238,18 @@ describe("itinerary search, selectors, and helpers", () => {
     });
     expect(getTripDateSpan([{ ...stops[0], departureDate: null }])).toBeNull();
     expect(getPlaybackProgressPercent(playback)).toBe(34);
+    expect(getPlaybackDaySummary(stops, legs, playback)).toEqual({
+      currentDay: 18,
+      totalDays: 50,
+      currentDateLabel: "Mon, Mar 9, 2026",
+      rangeLabel: "Fri, Feb 20, 2026 -> Fri, Apr 10, 2026",
+    });
     const itineraryPointOfView = getItineraryFitPointOfView(stops);
     expect(itineraryPointOfView.lat).toBeGreaterThan(35);
     expect(itineraryPointOfView.lat).toBeLessThan(45);
     expect(itineraryPointOfView.lng).toBeLessThan(-10);
     expect(itineraryPointOfView.lng).toBeGreaterThan(-90);
-    expect(itineraryPointOfView.altitude).toBeGreaterThanOrEqual(2.55);
+    expect(itineraryPointOfView.altitude).toBe(1.62);
   });
 
   it("builds whole-trip timeline frames, low path endpoints, and playback progression", () => {

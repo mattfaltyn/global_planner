@@ -170,6 +170,11 @@ describe("GlobeShell", () => {
     expect(screen.getByTestId("selected-leg-mode")).toHaveTextContent("ground");
     await user.click(screen.getByRole("button", { name: "Play this leg" }));
     expect(screen.getByRole("button", { name: "Pause" })).toBeInTheDocument();
+    await act(async () => {
+      globeProps?.onAutoFollowSuspendedChange?.(true);
+    });
+    expect(screen.getAllByRole("button", { name: "Recenter" })).toHaveLength(2);
+    await user.click(screen.getAllByRole("button", { name: "Recenter" })[0]);
     await user.click(screen.getByRole("button", { name: "Pause" }));
     await user.click(screen.getByRole("button", { name: "Reset" }));
     await user.click(screen.getByRole("button", { name: "Previous" }));
@@ -212,6 +217,12 @@ describe("GlobeShell", () => {
       window.__GLOBAL_PLANNER_TEST_API__?.selectLeg("missing");
       window.__GLOBAL_PLANNER_TEST_API__?.selectStop("seed-stop-1");
       window.__GLOBAL_PLANNER_TEST_API__?.selectStop("missing");
+      globeProps?.onCameraStateChange?.({
+        mode: "overview",
+        targetPointOfView: { lat: 20, lng: -32, altitude: 1.62 },
+        currentPointOfView: { lat: 20, lng: -32, altitude: 1.62 },
+        autoFollowSuspended: false,
+      });
     });
 
     await waitFor(() => {
@@ -221,6 +232,7 @@ describe("GlobeShell", () => {
       expect(apiState?.playbackStatus).toBe("idle");
       expect(apiState?.activeLegIndex).toBe(0);
       expect(apiState?.tripProgress).toBe(0);
+      expect(window.__GLOBAL_PLANNER_TEST_API__?.getCameraState()).not.toBeNull();
     });
 
     view.unmount();

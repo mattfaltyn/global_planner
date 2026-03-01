@@ -6,6 +6,11 @@ test("initial load exposes itinerary playback UI", async ({ page }) => {
   await expect(page.getByLabel("Search airports")).toBeVisible();
   await expect(page.getByTestId("trip-playback-bar")).toContainText("Vancouver to Porto");
   await expect(page.getByTestId("itinerary-dock")).toContainText("Travel itinerary");
+  await expect
+    .poll(async () => {
+      return page.evaluate(() => window.__GLOBAL_PLANNER_TEST_API__?.getCameraState()?.mode);
+    })
+    .toBe("overview");
 });
 
 test("search adds a stop and opens edit mode", async ({ page }) => {
@@ -27,6 +32,24 @@ test("whole-trip playback and test api wiring work", async ({ page }) => {
   await expect(
     page.getByTestId("trip-playback-bar").getByRole("button", { name: "Pause" })
   ).toBeVisible();
+  await expect
+    .poll(async () => {
+      return page.evaluate(() => window.__GLOBAL_PLANNER_TEST_API__?.getCameraState()?.mode);
+    })
+    .toBe("playback-follow");
+
+  await page.getByTestId("globe-canvas").getByRole("button", { name: "Simulate manual camera" }).click();
+  await expect(
+    page.getByTestId("trip-playback-bar").getByRole("button", { name: "Recenter" })
+  ).toBeVisible();
+  await expect
+    .poll(async () => {
+      return page.evaluate(
+        () => window.__GLOBAL_PLANNER_TEST_API__?.getCameraState()?.autoFollowSuspended
+      );
+    })
+    .toBe(true);
+  await page.getByTestId("trip-playback-bar").getByRole("button", { name: "Recenter" }).click();
 
   await page.evaluate(() => {
     window.__GLOBAL_PLANNER_TEST_API__?.selectLeg("seed-stop-4__seed-stop-5");

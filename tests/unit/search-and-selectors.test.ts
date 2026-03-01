@@ -263,7 +263,7 @@ describe("itinerary search, selectors, and helpers", () => {
   it("builds whole-trip timeline frames, low path endpoints, and playback progression", () => {
     const { stops, legs } = createResolvedFixtureItinerary();
     const playback = createInitialPlaybackState();
-    const segments = buildTimelineSegments(legs);
+    const segments = buildTimelineSegments(legs, stops);
     const midAirProgress = getTripProgressFromLegPosition(segments, 0, 0.5, "travel", 1);
     const dwellProgress = getTripProgressFromLegPosition(segments, 0, 0, "dwell", 1);
     const midAirFrame = getTimelineFrameFromTripProgress(segments, midAirProgress, 1);
@@ -272,16 +272,21 @@ describe("itinerary search, selectors, and helpers", () => {
       Math.min(1, dwellProgress + 0.001),
       1
     );
-    const startedAtLegFour = jumpPlaybackToLegStart(playback, legs, 4);
-    const progressed = advancePlaybackState({ ...playback, status: "playing" }, legs, 1000);
-    const completed = advancePlaybackState({ ...playback, status: "playing" }, legs, 50_000);
+    const startedAtLegFour = jumpPlaybackToLegStart(playback, legs, stops, 4);
+    const progressed = advancePlaybackState({ ...playback, status: "playing" }, legs, stops, 1000);
+    const completed = advancePlaybackState(
+      { ...playback, status: "playing" },
+      legs,
+      stops,
+      50_000
+    );
     const airPath = buildLegPathPoints(stops[0], stops[1], "air");
     const groundPath = buildLegPathPoints(stops[1], stops[2], "ground");
 
-    expect(segments).toHaveLength(15);
+    expect(segments).toHaveLength(16);
     expect(segments[0]).toMatchObject({ kind: "travel", legIndex: 0, durationMs: 1800 });
     expect(segments[1]).toMatchObject({ kind: "dwell", legIndex: 0, durationMs: 700 });
-    expect(getTotalTimelineDurationMs(segments, 1)).toBe(22900);
+    expect(getTotalTimelineDurationMs(segments, 1)).toBe(23600);
     expect(midAirFrame).toMatchObject({
       activeLegIndex: 0,
       phase: "travel",
@@ -300,6 +305,7 @@ describe("itinerary search, selectors, and helpers", () => {
       tripProgress: 1,
       activeLegIndex: legs.length - 1,
       activeLegProgress: 1,
+      phase: "dwell",
     });
 
     expect(airPath[0]?.lat).toBeCloseTo(stops[0].lat ?? 0, 6);

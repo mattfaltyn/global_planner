@@ -1,5 +1,6 @@
 import type {
   ItineraryLeg,
+  ItineraryStop,
   PlaybackPhase,
   PlaybackSpeed,
 } from "../data/types";
@@ -23,7 +24,20 @@ function getTravelDurationMs(leg: ItineraryLeg) {
   return leg.mode === "air" ? AIR_TRAVEL_MS : GROUND_TRAVEL_MS;
 }
 
-export function buildTimelineSegments(legs: ItineraryLeg[]): TimelineSegment[] {
+function hasFinalDwellStop(stops: ItineraryStop[]) {
+  const finalStop = stops.at(-1);
+  if (!finalStop?.arrivalDate || !finalStop.departureDate) {
+    return false;
+  }
+
+  return new Date(`${finalStop.departureDate}T00:00:00Z`).getTime() >
+    new Date(`${finalStop.arrivalDate}T00:00:00Z`).getTime();
+}
+
+export function buildTimelineSegments(
+  legs: ItineraryLeg[],
+  stops: ItineraryStop[] = []
+): TimelineSegment[] {
   return legs.flatMap((leg, legIndex) => {
     const travelSegment: TimelineSegment = {
       kind: "travel",
@@ -32,6 +46,10 @@ export function buildTimelineSegments(legs: ItineraryLeg[]): TimelineSegment[] {
     };
 
     if (legIndex === legs.length - 1) {
+      if (!hasFinalDwellStop(stops)) {
+        return [travelSegment];
+      }
+
       return [travelSegment];
     }
 
@@ -43,7 +61,17 @@ export function buildTimelineSegments(legs: ItineraryLeg[]): TimelineSegment[] {
         durationMs: DWELL_MS,
       } satisfies TimelineSegment,
     ];
-  });
+  }).concat(
+    hasFinalDwellStop(stops) && legs.length > 0
+      ? [
+          {
+            kind: "dwell" as const,
+            legIndex: legs.length - 1,
+            durationMs: DWELL_MS,
+          },
+        ]
+      : []
+  );
 }
 
 export function getTotalTimelineDurationMs(

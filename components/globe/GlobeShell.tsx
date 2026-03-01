@@ -159,8 +159,8 @@ export function GlobeShell() {
   );
   const selectedLeg = getSelectedLeg(state.selection, state.itinerary.legs);
   const timelineSegments = useMemo(
-    () => getTimelineSegments(state.itinerary.legs),
-    [state.itinerary.legs]
+    () => getTimelineSegments(state.itinerary.legs, state.itinerary.stops),
+    [state.itinerary.legs, state.itinerary.stops]
   );
   const handleCameraStateChange = useCallback((snapshot: CameraSnapshot) => {
     cameraStateRef.current = snapshot;

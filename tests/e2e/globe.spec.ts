@@ -70,7 +70,7 @@ test("whole-trip playback and test api wiring work", async ({ page }) => {
   });
 
   await expect(page).toHaveURL(/leg=seed-stop-4__seed-stop-5/);
-  await expect(page.getByTestId("timeline-state")).toContainText("15 timeline segments");
+  await expect(page.getByTestId("timeline-state")).toContainText("16 timeline segments");
 
   await page.getByTestId("globe-canvas").getByRole("button", { name: "Porto" }).click();
   await expect(page).toHaveURL(/stop=seed-stop-1/);

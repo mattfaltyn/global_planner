@@ -1,4 +1,4 @@
-import type { ItineraryLeg, PlaybackState } from "../data/types";
+import type { ItineraryLeg, ItineraryStop, PlaybackState } from "../data/types";
 import {
   buildTimelineSegments,
   getTimelineFrameFromTripProgress,
@@ -9,11 +9,12 @@ import {
 function createPlaybackFrame(
   tripProgress: number,
   legs: ItineraryLeg[],
+  stops: ItineraryStop[],
   speed: PlaybackState["speed"],
   status: PlaybackState["status"]
 ): PlaybackState {
   const frame = getTimelineFrameFromTripProgress(
-    buildTimelineSegments(legs),
+    buildTimelineSegments(legs, stops),
     tripProgress,
     speed
   );
@@ -42,22 +43,24 @@ export function createInitialPlaybackState(): PlaybackState {
 export function syncPlaybackState(
   playback: PlaybackState,
   legs: ItineraryLeg[],
+  stops: ItineraryStop[] = [],
   tripProgress = playback.tripProgress,
   status = playback.status
 ) {
-  return createPlaybackFrame(tripProgress, legs, playback.speed, status);
+  return createPlaybackFrame(tripProgress, legs, stops, playback.speed, status);
 }
 
 export function advancePlaybackState(
   playback: PlaybackState,
   legs: ItineraryLeg[],
+  stops: ItineraryStop[] = [],
   deltaMs: number
 ): PlaybackState {
   if (playback.status !== "playing" || legs.length === 0) {
     return playback;
   }
 
-  const segments = buildTimelineSegments(legs);
+  const segments = buildTimelineSegments(legs, stops);
   const totalDurationMs = segments.reduce(
     (sum, segment) => sum + segment.durationMs / playback.speed,
     0
@@ -77,6 +80,7 @@ export function advancePlaybackState(
   const nextPlayback = syncPlaybackState(
     playback,
     legs,
+    stops,
     nextTripProgress,
     nextTripProgress >= 1 ? "paused" : "playing"
   );
@@ -87,31 +91,33 @@ export function advancePlaybackState(
 export function jumpPlaybackToLegStart(
   playback: PlaybackState,
   legs: ItineraryLeg[],
+  stops: ItineraryStop[] = [],
   legIndex: number,
   status: PlaybackState["status"] = "paused"
 ) {
   const boundedLegIndex = Math.max(0, Math.min(legIndex, Math.max(legs.length - 1, 0)));
   const tripProgress = getTripProgressForLegStart(
-    buildTimelineSegments(legs),
+    buildTimelineSegments(legs, stops),
     boundedLegIndex,
     playback.speed
   );
 
-  return syncPlaybackState(playback, legs, tripProgress, status);
+  return syncPlaybackState(playback, legs, stops, tripProgress, status);
 }
 
 export function jumpPlaybackToLegEnd(
   playback: PlaybackState,
   legs: ItineraryLeg[],
+  stops: ItineraryStop[] = [],
   legIndex: number,
   status: PlaybackState["status"] = "paused"
 ) {
   const boundedLegIndex = Math.max(0, Math.min(legIndex, Math.max(legs.length - 1, 0)));
   const tripProgress = getTripProgressForLegEnd(
-    buildTimelineSegments(legs),
+    buildTimelineSegments(legs, stops),
     boundedLegIndex,
     playback.speed
   );
 
-  return syncPlaybackState(playback, legs, tripProgress, status);
+  return syncPlaybackState(playback, legs, stops, tripProgress, status);
 }

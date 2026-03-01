@@ -159,7 +159,7 @@ function getPlaybackDateMetrics(
   const startMs = toUtcDateMs(span.start);
   const endMs = toUtcDateMs(span.end);
   const totalDays = Math.max(1, Math.floor((endMs - startMs) / 86_400_000) + 1);
-  const segments = buildTimelineSegments(legs);
+  const segments = buildTimelineSegments(legs, stops);
   const { segment, progress } = getSegmentProgress(
     segments,
     playback.tripProgress,
@@ -221,16 +221,17 @@ export function getPlaybackDaySummary(
   };
 }
 
-export function getTimelineSegments(legs: ItineraryLeg[]) {
-  return buildTimelineSegments(legs);
+export function getTimelineSegments(legs: ItineraryLeg[], stops: ItineraryStop[] = []) {
+  return buildTimelineSegments(legs, stops);
 }
 
 export function getTimelineFrame(
   playback: PlaybackState,
-  legs: ItineraryLeg[]
+  legs: ItineraryLeg[],
+  stops: ItineraryStop[] = []
 ): TimelineFrame {
   return getTimelineFrameFromTripProgress(
-    buildTimelineSegments(legs),
+    buildTimelineSegments(legs, stops),
     playback.tripProgress,
     playback.speed
   );

@@ -74,7 +74,7 @@ describe("GlobeShell", () => {
     expect(screen.getByTestId("globe-canvas-mock")).toBeInTheDocument();
     expect(screen.getByTestId("itinerary-dock")).toHaveTextContent("Travel itinerary");
     expect(screen.getByTestId("trip-playback-bar")).toHaveTextContent("Vancouver to Porto");
-    expect(screen.getByTestId("timeline-state")).toHaveTextContent("15 timeline segments");
+    expect(screen.getByTestId("timeline-state")).toHaveTextContent("16 timeline segments");
 
     await user.click(screen.getByRole("button", { name: "Edit" }));
     expect(screen.getByTestId("itinerary-panel")).toHaveTextContent("9 total");

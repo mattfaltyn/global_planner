@@ -1,143 +1,70 @@
 import type {
-  DatasetIndexes,
-  DestinationListItem,
-  RouteRecord,
-  RouteSortKey,
-  SelectionState,
+  ItineraryLeg,
+  ItinerarySelection,
+  ItineraryStop,
+  PlaybackState,
 } from "../data/types";
+import {
+  parseItinerarySelectionFromQuery,
+  serializeItinerarySelectionToQuery,
+} from "../itinerary/urls";
 
-export function getAirportBySelection(
-  selection: SelectionState,
-  indexes: DatasetIndexes
+export {
+  parseItinerarySelectionFromQuery,
+  serializeItinerarySelectionToQuery,
+};
+
+export function getSelectedStop(
+  selection: ItinerarySelection,
+  stops: ItineraryStop[]
 ) {
-  if (!selection) {
+  if (!selection || selection.kind !== "stop") {
     return null;
   }
 
-  return indexes.airportsById.get(selection.airportId) ?? null;
+  return stops.find((stop) => stop.id === selection.stopId) ?? null;
 }
 
-export function getRouteBySelection(
-  selection: SelectionState,
-  indexes: DatasetIndexes
+export function getSelectedLeg(
+  selection: ItinerarySelection,
+  legs: ItineraryLeg[]
 ) {
-  if (!selection || selection.kind !== "route") {
+  if (!selection || selection.kind !== "leg") {
     return null;
   }
 
-  return indexes.routesById.get(selection.routeId) ?? null;
+  return legs.find((leg) => leg.id === selection.legId) ?? null;
 }
 
-export function getAirportDestinations(
-  airportId: string,
-  indexes: DatasetIndexes
-): DestinationListItem[] {
-  return (indexes.routeIdsByAirportId.get(airportId) ?? [])
-    .map((routeId) => indexes.routesById.get(routeId))
-    .filter((route): route is RouteRecord => Boolean(route))
-    .map((route) => {
-      const destinationId =
-        route.airportAId === airportId ? route.airportBId : route.airportAId;
-      const airport = indexes.airportsById.get(destinationId);
-
-      if (!airport) {
-        throw new Error(`Missing airport ${destinationId}`);
-      }
-
-      return {
-        airport,
-        route,
-        distanceKm: route.distanceKm,
-      };
-    });
+export function getLegByIndex(legs: ItineraryLeg[], activeLegIndex: number) {
+  return legs[activeLegIndex] ?? null;
 }
 
-export function filterAndSortDestinations(
-  items: DestinationListItem[],
-  query: string,
-  sortKey: RouteSortKey
-) {
-  const normalizedQuery = query.trim().toLowerCase();
-
-  return items
-    .filter((item) => {
-      if (!normalizedQuery) {
-        return true;
-      }
-
-      return [
-        item.airport.name,
-        item.airport.city,
-        item.airport.country,
-        item.airport.iata ?? "",
-        item.airport.icao ?? "",
-      ]
-        .join(" ")
-        .toLowerCase()
-        .includes(normalizedQuery);
-    })
-    .sort((left, right) => {
-      if (sortKey === "distance") {
-        return left.distanceKm - right.distanceKm || left.airport.name.localeCompare(right.airport.name);
-      }
-
-      return left.airport.name.localeCompare(right.airport.name);
-    });
+export function getTravelModeCounts(legs: ItineraryLeg[]) {
+  return legs.reduce(
+    (counts, leg) => {
+      counts[leg.mode] += 1;
+      return counts;
+    },
+    { air: 0, ground: 0 }
+  );
 }
 
-export function serializeSelectionToQuery(selection: SelectionState) {
-  const params = new URLSearchParams();
+export function getTripDateSpan(stops: ItineraryStop[]) {
+  const departureDates = stops
+    .map((stop) => stop.departureDate)
+    .filter((value): value is string => Boolean(value));
 
-  if (!selection) {
-    return "";
-  }
-
-  params.set("airport", selection.airportId);
-
-  if (selection.kind === "route") {
-    params.set("route", selection.routeId);
-  }
-
-  return `?${params.toString()}`;
-}
-
-export function parseSelectionFromQuery(
-  search: string,
-  indexes: DatasetIndexes
-): SelectionState {
-  const params = new URLSearchParams(search);
-  const airportId = params.get("airport");
-  const routeId = params.get("route");
-
-  if (!airportId || !indexes.airportsById.has(airportId)) {
+  if (departureDates.length === 0) {
     return null;
-  }
-
-  if (!routeId) {
-    return {
-      kind: "airport",
-      airportId,
-    };
-  }
-
-  const route = indexes.routesById.get(routeId);
-  if (!route) {
-    return {
-      kind: "airport",
-      airportId,
-    };
-  }
-
-  if (route.airportAId !== airportId && route.airportBId !== airportId) {
-    return {
-      kind: "airport",
-      airportId,
-    };
   }
 
   return {
-    kind: "route",
-    routeId,
-    airportId,
+    start: departureDates[0],
+    end: departureDates[departureDates.length - 1],
   };
+}
+
+export function getPlaybackProgressPercent(playback: PlaybackState) {
+  return Math.round(playback.progress * 100);
 }

@@ -21,7 +21,7 @@ describe("runtime config and utility modules", () => {
     expect(nextConfig.reactStrictMode).toBe(true);
     expect(nextConfig.allowedDevOrigins).toEqual(["127.0.0.1", "localhost"]);
     expect(playwrightConfig.webServer?.command).toContain("NEXT_PUBLIC_E2E=1");
-    expect(playwrightConfig.use?.baseURL).toBe("http://127.0.0.1:3000");
+    expect(playwrightConfig.use?.baseURL).toBe("http://127.0.0.1:3100");
   });
 
   it("formats distances, durations, and coordinates", () => {

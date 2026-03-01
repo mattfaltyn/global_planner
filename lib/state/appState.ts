@@ -1,4 +1,5 @@
 import type {
+  DockMode,
   HoverState,
   ItineraryLeg,
   ItinerarySelection,
@@ -25,8 +26,6 @@ export type LoadState =
   | { status: "idle" | "loading" }
   | { status: "ready"; dataset: LoadedDataset }
   | { status: "error"; message: string };
-
-export type DockMode = "playback" | "edit";
 
 export type AppState = {
   loadState: LoadState;

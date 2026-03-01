@@ -1,6 +1,15 @@
 .wrap {
   position: relative;
-  width: min(320px, calc(100vw - 48px));
+  width: min(280px, calc(100vw - 48px));
+  transition: width 180ms ease;
+}
+
+.desktopWrap.expanded {
+  width: min(360px, calc(100vw - 48px));
+}
+
+.mobileWrap {
+  width: 100%;
 }
 
 .label {
@@ -12,17 +21,39 @@
   letter-spacing: 0.12em;
 }
 
+.mobileLabel {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .input {
   width: 100%;
   border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 18px;
+  border-radius: 16px;
   background: rgba(8, 15, 28, 0.82);
   color: var(--text);
-  padding: 16px 18px;
+  padding: 14px 16px;
   box-shadow: var(--shadow);
   backdrop-filter: blur(18px);
 }
 
 .input::placeholder {
   color: rgba(237, 244, 255, 0.45);
+}
+
+@media (max-width: 960px) {
+  .wrap {
+    width: 100%;
+  }
+
+  .input {
+    padding: 13px 14px;
+  }
 }

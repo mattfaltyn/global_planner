@@ -1,38 +1,39 @@
-.dock,
-.mobileDock,
-.collapsedDock,
-.mobileCollapsedDock {
+.dock {
   border: 1px solid var(--panel-border);
   background: var(--panel);
   backdrop-filter: blur(18px);
   box-shadow: var(--shadow);
+  overflow: hidden auto;
 }
 
-.dock,
-.mobileDock {
-  width: min(360px, calc(100vw - 32px));
-  border-radius: 26px;
+.desktopDock {
+  height: 100%;
+  border-radius: 28px;
   padding: 18px;
-  overflow: auto;
 }
 
 .mobileDock {
   width: 100%;
-  max-height: 62vh;
-  border-radius: 26px 26px 0 0;
+  border-radius: 28px 28px 0 0;
+  padding: 12px 16px 20px;
+  max-height: min(82vh, calc(100vh - 128px));
 }
 
-.collapsedDock,
-.mobileCollapsedDock {
-  width: min(240px, calc(100vw - 32px));
-  border-radius: 22px;
-  padding: 14px 16px;
-  display: grid;
-  gap: 10px;
+.playbackDock.desktopDock {
+  width: min(320px, 100%);
 }
 
-.mobileCollapsedDock {
-  width: calc(100vw - 24px);
+.editDock.desktopDock {
+  width: min(420px, 100%);
+}
+
+.collapsed.desktopDock {
+  width: 88px;
+  padding: 14px 10px;
+}
+
+.collapsed.mobileDock {
+  padding: 10px 16px 14px;
 }
 
 .header,
@@ -45,6 +46,14 @@
 .header {
   grid-template-columns: 1fr auto;
   align-items: start;
+}
+
+.sheetHandle {
+  width: 52px;
+  height: 5px;
+  margin: 0 auto 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
 }
 
 .kicker,
@@ -61,6 +70,7 @@
 }
 
 .title,
+.titleCompact,
 .sectionTitle,
 .primaryCopy {
   margin: 0;
@@ -70,6 +80,11 @@
   margin-top: 4px;
   font-size: 1.45rem;
   font-family: var(--font-display), Georgia, serif;
+}
+
+.titleCompact {
+  font-size: 0.95rem;
+  line-height: 1.2;
 }
 
 .toggleButton,
@@ -91,7 +106,7 @@
 
 .tabRow {
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  margin-top: 16px;
+  margin-top: 14px;
 }
 
 .tab,
@@ -105,8 +120,8 @@
 
 .playbackPane {
   display: grid;
-  gap: 16px;
-  margin-top: 18px;
+  gap: 14px;
+  margin-top: 16px;
 }
 
 .summaryGrid {
@@ -114,7 +129,8 @@
 }
 
 .card,
-.section {
+.section,
+.collapsedSummary {
   padding: 12px 14px;
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.04);
@@ -136,10 +152,27 @@
   gap: 6px;
 }
 
+.collapsedSummary {
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+  background: transparent;
+}
+
 @media (max-width: 960px) {
-  .dock,
-  .mobileDock {
-    width: 100%;
-    border-radius: 26px 26px 0 0;
+  .mobileDock[data-snap-point="collapsed"] {
+    max-height: 84px;
+  }
+
+  .mobileDock[data-snap-point="half"] {
+    max-height: 42vh;
+  }
+
+  .mobileDock[data-snap-point="full"] {
+    max-height: min(82vh, calc(100vh - 96px));
+  }
+
+  .summaryGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

@@ -1,23 +1,31 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { AirportRecord } from "../../lib/data/types";
+import type { AirportRecord, ShellLayoutMode } from "../../lib/data/types";
 import { SearchResults } from "./SearchResults";
 import styles from "./SearchBox.module.css";
 
 type SearchBoxProps = {
   query: string;
   results: AirportRecord[];
+  layoutMode?: ShellLayoutMode;
+  expanded?: boolean;
   placeholder?: string;
   onQueryChange: (value: string) => void;
+  onFocus?: () => void;
+  onBlur?: () => void;
   onSelect: (airport: AirportRecord) => void;
 };
 
 export function SearchBox({
   query,
   results,
+  layoutMode = "desktop",
+  expanded = false,
   placeholder = "Search by airport, city, IATA, or ICAO",
   onQueryChange,
+  onFocus,
+  onBlur,
   onSelect,
 }: SearchBoxProps) {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -29,8 +37,20 @@ export function SearchBox({
   const hasResults = query.trim().length > 0 && results.length > 0;
 
   return (
-    <div className={styles.wrap}>
-      <label className={styles.label} htmlFor="airport-search">
+    <div
+      className={[
+        styles.wrap,
+        layoutMode === "mobile" ? styles.mobileWrap : styles.desktopWrap,
+        expanded ? styles.expanded : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+      data-layout-mode={layoutMode}
+    >
+      <label
+        className={layoutMode === "mobile" ? styles.mobileLabel : styles.label}
+        htmlFor="airport-search"
+      >
         Search airports
       </label>
       <input
@@ -40,6 +60,8 @@ export function SearchBox({
         autoComplete="off"
         value={query}
         onChange={(event) => onQueryChange(event.target.value)}
+        onFocus={onFocus}
+        onBlur={onBlur}
         onKeyDown={(event) => {
           if (!hasResults) {
             return;

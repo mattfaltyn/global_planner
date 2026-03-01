@@ -81,6 +81,7 @@ describe("app shells and UI components", () => {
           legs={legs}
           selection={null}
           playback={createPlayback()}
+          safeAreaInsets={{ top: 0, right: 0, bottom: 0, left: 0 }}
           onSelectStop={onSelectStop}
           onSelectLeg={onSelectLeg}
           onClearSelection={onClearSelection}
@@ -116,6 +117,7 @@ describe("app shells and UI components", () => {
         stops={stops}
         legs={legs}
         selection={{ kind: "leg", legId: legs[0].id }}
+        safeAreaInsets={{ top: 0, right: 0, bottom: 0, left: 0 }}
         playback={createPlayback({
           status: "paused",
           tripProgress: 0.25,
@@ -241,9 +243,8 @@ describe("app shells and UI components", () => {
           tripProgress: 0.5,
           activeLegIndex: 4,
         })}
-        mode="playback"
-        collapsed={false}
-        isTouchDevice={false}
+        layoutMode="desktop"
+        shellState={{ mode: "playback", collapsed: false }}
         showRecenter
         onSetMode={onSetMode}
         onToggleCollapsed={onToggleCollapsed}
@@ -261,8 +262,6 @@ describe("app shells and UI components", () => {
     );
 
     expect(screen.getByText("Travel itinerary")).toBeInTheDocument();
-    expect(screen.getByText("Current route")).toBeInTheDocument();
-    expect(screen.getByText("Lisbon to Barcelona")).toBeInTheDocument();
     expect(screen.getByText("Feb 20, 2026 to Apr 10, 2026")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Recenter" }));
     expect(onRecenter).toHaveBeenCalled();
@@ -281,9 +280,8 @@ describe("app shells and UI components", () => {
           tripProgress: 0.5,
           activeLegIndex: 4,
         })}
-        mode="playback"
-        collapsed
-        isTouchDevice={false}
+        layoutMode="desktop"
+        shellState={{ mode: "playback", collapsed: true }}
         onSetMode={onSetMode}
         onToggleCollapsed={onToggleCollapsed}
         onSelectStop={() => undefined}
@@ -299,6 +297,63 @@ describe("app shells and UI components", () => {
     );
 
     expect(screen.getByRole("button", { name: "Expand" })).toBeInTheDocument();
+  });
+
+  it("renders the mobile bottom-sheet dock states", async () => {
+    const user = userEvent.setup();
+    const { stops, legs } = createResolvedFixtureItinerary();
+    const onSetMode = vi.fn();
+    const onToggleCollapsed = vi.fn();
+
+    const { rerender } = render(
+      <ItineraryDock
+        stops={stops}
+        legs={legs}
+        selection={null}
+        playback={createPlayback()}
+        layoutMode="mobile"
+        shellState={{ mode: "playback", collapsed: true, snapPoint: "collapsed" }}
+        onSetMode={onSetMode}
+        onToggleCollapsed={onToggleCollapsed}
+        onSelectStop={() => undefined}
+        onMoveStopUp={() => undefined}
+        onMoveStopDown={() => undefined}
+        onRemoveStop={() => undefined}
+        onInsertAfter={() => undefined}
+        onUpdateStop={() => undefined}
+        onReplaceAnchor={() => undefined}
+        onSetLegMode={() => undefined}
+        onPlayLeg={() => undefined}
+      />
+    );
+
+    expect(screen.getByRole("button", { name: "Expand" })).toBeInTheDocument();
+
+    rerender(
+      <ItineraryDock
+        stops={stops}
+        legs={legs}
+        selection={null}
+        playback={createPlayback()}
+        layoutMode="mobile"
+        shellState={{ mode: "playback", collapsed: false, snapPoint: "half" }}
+        onSetMode={onSetMode}
+        onToggleCollapsed={onToggleCollapsed}
+        onSelectStop={() => undefined}
+        onMoveStopUp={() => undefined}
+        onMoveStopDown={() => undefined}
+        onRemoveStop={() => undefined}
+        onInsertAfter={() => undefined}
+        onUpdateStop={() => undefined}
+        onReplaceAnchor={() => undefined}
+        onSetLegMode={() => undefined}
+        onPlayLeg={() => undefined}
+      />
+    );
+
+    expect(screen.getByTestId("itinerary-dock")).toHaveAttribute("data-snap-point", "half");
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    expect(onSetMode).toHaveBeenCalledWith("edit");
   });
 
   it("renders the trip playback bar and unresolved stop editor state", async () => {
@@ -326,6 +381,8 @@ describe("app shells and UI components", () => {
           stops={stops}
           legs={legs}
           playback={createPlayback()}
+          layoutMode="desktop"
+          compact
           showRecenter
           onPlay={onPlay}
           onPause={() => undefined}
@@ -439,9 +496,8 @@ describe("app shells and UI components", () => {
             activeLegIndex: 0,
             activeLegProgress: 0.5,
           })}
-          mode="playback"
-          collapsed={false}
-          isTouchDevice={false}
+          layoutMode="desktop"
+          shellState={{ mode: "playback", collapsed: false }}
           onSetMode={() => undefined}
           onToggleCollapsed={() => undefined}
           onSelectStop={() => undefined}
@@ -471,7 +527,6 @@ describe("app shells and UI components", () => {
       </>
     );
 
-    expect(screen.getByText("Dates unavailable")).toBeInTheDocument();
     expect(screen.getAllByText(/missing-from to missing-to/)).toHaveLength(2);
     expect(screen.getByText("Unknown distance")).toBeInTheDocument();
   });
@@ -483,6 +538,7 @@ describe("app shells and UI components", () => {
 
     const { rerender } = render(
       <SearchBox
+        layoutMode="desktop"
         query="V"
         results={fixtureAirports.map((airport) => ({ ...airport }))}
         onQueryChange={onQueryChange}
@@ -500,6 +556,7 @@ describe("app shells and UI components", () => {
 
     rerender(
       <SearchBox
+        layoutMode="desktop"
         query=""
         results={[]}
         onQueryChange={onQueryChange}

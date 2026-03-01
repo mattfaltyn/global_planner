@@ -1,5 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
-import type { ItineraryLeg, ItinerarySelection, ItineraryStop, PathPoint } from "../../lib/data/types";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import type {
+  GlobeSafeAreaInsets,
+  ItineraryLeg,
+  ItinerarySelection,
+  ItineraryStop,
+  PathPoint,
+} from "../../lib/data/types";
 import {
   type CameraSnapshot,
   resolveCameraIntent,
@@ -17,6 +23,7 @@ type TestGlobeCanvasProps = {
   legs: ItineraryLeg[];
   selection: ItinerarySelection;
   isTouchDevice?: boolean;
+  safeAreaInsets?: GlobeSafeAreaInsets;
   playback: {
     status: "idle" | "playing" | "paused";
     speed: 0.5 | 1 | 2 | 4;
@@ -45,6 +52,7 @@ export function TestGlobeCanvas({
   legs,
   selection,
   isTouchDevice = false,
+  safeAreaInsets = { top: 0, right: 0, bottom: 0, left: 0 },
   playback,
   forceRecenterToken = 0,
   onAutoFollowSuspendedChange,
@@ -131,7 +139,18 @@ export function TestGlobeCanvas({
   ]);
 
   return (
-    <div className={styles.canvas} data-testid="globe-canvas">
+    <div
+      className={styles.canvas}
+      data-testid="globe-canvas"
+      style={
+        {
+          "--safe-top": `${safeAreaInsets.top}px`,
+          "--safe-right": `${safeAreaInsets.right}px`,
+          "--safe-bottom": `${safeAreaInsets.bottom}px`,
+          "--safe-left": `${safeAreaInsets.left}px`,
+        } as CSSProperties
+      }
+    >
       <div
         style={{
           position: "absolute",

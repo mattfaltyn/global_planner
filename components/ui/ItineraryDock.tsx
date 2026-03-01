@@ -1,12 +1,17 @@
 import type {
+  DockMode,
   ItineraryLeg,
   ItinerarySelection,
   ItineraryStop,
   PlaybackState,
+  ShellLayoutMode,
+  SheetSnapPoint,
   TravelMode,
 } from "../../lib/data/types";
 import {
   getActiveLegLabel,
+  getSelectedLeg,
+  getSelectedStop,
   getTravelModeCounts,
   getTripDateSpan,
 } from "../../lib/state/selectors";
@@ -18,11 +23,14 @@ type ItineraryDockProps = {
   legs: ItineraryLeg[];
   selection: ItinerarySelection;
   playback: PlaybackState;
-  mode: "playback" | "edit";
-  collapsed: boolean;
-  isTouchDevice: boolean;
+  layoutMode: ShellLayoutMode;
+  shellState: {
+    mode: DockMode;
+    collapsed: boolean;
+    snapPoint?: SheetSnapPoint;
+  };
   showRecenter?: boolean;
-  onSetMode: (mode: "playback" | "edit") => void;
+  onSetMode: (mode: DockMode) => void;
   onToggleCollapsed: () => void;
   onRecenter?: () => void;
   onSelectStop: (stopId: string) => void;
@@ -53,9 +61,8 @@ export function ItineraryDock({
   legs,
   selection,
   playback,
-  mode,
-  collapsed,
-  isTouchDevice,
+  layoutMode,
+  shellState,
   showRecenter = false,
   onSetMode,
   onToggleCollapsed,
@@ -72,23 +79,37 @@ export function ItineraryDock({
 }: ItineraryDockProps) {
   const modeCounts = getTravelModeCounts(legs);
   const dateSpan = getTripDateSpan(stops);
+  const selectedStop = getSelectedStop(selection, stops);
+  const selectedLeg = getSelectedLeg(selection, legs);
+  const activeLabel = getActiveLegLabel(stops, legs, playback);
+  const isMobile = layoutMode === "mobile";
+  const isCollapsed = isMobile
+    ? (shellState.snapPoint ?? "collapsed") === "collapsed"
+    : shellState.collapsed;
+  const rootClassName = [
+    styles.dock,
+    isMobile ? styles.mobileDock : styles.desktopDock,
+    shellState.mode === "edit" ? styles.editDock : styles.playbackDock,
+    isCollapsed ? styles.collapsed : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
-  if (collapsed) {
+  if (isCollapsed) {
     return (
       <aside
-        className={isTouchDevice ? styles.mobileCollapsedDock : styles.collapsedDock}
+        className={rootClassName}
+        data-layout-mode={layoutMode}
+        data-snap-point={shellState.snapPoint ?? "collapsed"}
         data-testid="itinerary-dock"
       >
-        <button
-          type="button"
-          className={styles.toggleButton}
-          onClick={onToggleCollapsed}
-        >
-          Expand
-        </button>
-        <div>
+        {isMobile ? <div className={styles.sheetHandle} /> : null}
+        <div className={styles.collapsedSummary}>
           <p className={styles.kicker}>Trip</p>
-          <h2 className={styles.title}>{getActiveLegLabel(stops, legs, playback)}</h2>
+          <h2 className={styles.titleCompact}>{activeLabel}</h2>
+          <button type="button" className={styles.toggleButton} onClick={onToggleCollapsed}>
+            Expand
+          </button>
         </div>
       </aside>
     );
@@ -96,37 +117,41 @@ export function ItineraryDock({
 
   return (
     <aside
-      className={isTouchDevice ? styles.mobileDock : styles.dock}
+      className={rootClassName}
+      data-layout-mode={layoutMode}
+      data-snap-point={shellState.snapPoint ?? "full"}
       data-testid="itinerary-dock"
     >
+      {isMobile ? <div className={styles.sheetHandle} /> : null}
+
       <div className={styles.header}>
         <div>
           <p className={styles.kicker}>Itinerary</p>
           <h2 className={styles.title}>Travel itinerary</h2>
         </div>
         <button type="button" className={styles.toggleButton} onClick={onToggleCollapsed}>
-          Collapse
+          {isMobile ? "Close" : "Collapse"}
         </button>
       </div>
 
       <div className={styles.tabRow}>
         <button
           type="button"
-          className={mode === "playback" ? styles.activeTab : styles.tab}
+          className={shellState.mode === "playback" ? styles.activeTab : styles.tab}
           onClick={() => onSetMode("playback")}
         >
           Playback
         </button>
         <button
           type="button"
-          className={mode === "edit" ? styles.activeTab : styles.tab}
+          className={shellState.mode === "edit" ? styles.activeTab : styles.tab}
           onClick={() => onSetMode("edit")}
         >
           Edit
         </button>
       </div>
 
-      {mode === "playback" ? (
+      {shellState.mode === "playback" ? (
         <div className={styles.playbackPane}>
           <div className={styles.summaryGrid}>
             <div className={styles.card}>
@@ -146,32 +171,34 @@ export function ItineraryDock({
               <dd>{modeCounts.ground}</dd>
             </div>
           </div>
-          <div className={styles.section}>
-            <h3 className={styles.sectionTitle}>Current route</h3>
-            <p className={styles.primaryCopy}>{getActiveLegLabel(stops, legs, playback)}</p>
-            <p className={styles.muted}>
-              {dateSpan ? formatDateSpan(dateSpan.start, dateSpan.end) : "Dates unavailable"}
-            </p>
-            {showRecenter ? (
-              <button
-                type="button"
-                className={styles.toggleButton}
-                onClick={onRecenter}
-              >
+
+          {dateSpan ? (
+            <div className={styles.section}>
+              <h3 className={styles.sectionTitle}>Trip span</h3>
+              <p className={styles.primaryCopy}>{formatDateSpan(dateSpan.start, dateSpan.end)}</p>
+            </div>
+          ) : null}
+
+          {selection ? (
+            <div className={styles.section}>
+              <h3 className={styles.sectionTitle}>Selection</h3>
+              <p className={styles.primaryCopy}>
+                {selectedStop
+                  ? `${selectedStop.label}, ${selectedStop.country}`
+                  : selectedLeg
+                    ? activeLabel
+                    : "Selection unavailable"}
+              </p>
+            </div>
+          ) : null}
+
+          {showRecenter ? (
+            <div className={styles.section}>
+              <button type="button" className={styles.toggleButton} onClick={onRecenter}>
                 Recenter
               </button>
-            ) : null}
-          </div>
-          <div className={styles.section}>
-            <h3 className={styles.sectionTitle}>Selected</h3>
-            <p className={styles.muted}>
-              {selection
-                ? selection.kind === "stop"
-                  ? `Stop ${selection.stopId}`
-                  : `Leg ${selection.legId}`
-                : "Nothing selected"}
-            </p>
-          </div>
+            </div>
+          ) : null}
         </div>
       ) : (
         <ItineraryPanel

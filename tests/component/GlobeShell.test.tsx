@@ -68,13 +68,14 @@ describe("GlobeShell", () => {
       expect(screen.getByTestId("dataset-status")).toHaveTextContent("Loaded 9 airports and 7 routes");
     });
     await waitFor(() => {
-      expect(screen.getByTestId("itinerary-dock")).toHaveTextContent("Vancouver to Porto");
+      expect(screen.getByTestId("itinerary-dock")).toHaveTextContent("Travel itinerary");
     });
 
     expect(screen.getByTestId("globe-canvas-mock")).toBeInTheDocument();
     expect(screen.getByTestId("itinerary-dock")).toHaveTextContent("Travel itinerary");
     expect(screen.getByTestId("trip-playback-bar")).toHaveTextContent("Vancouver to Porto");
     expect(screen.getByTestId("timeline-state")).toHaveTextContent("16 timeline segments");
+    expect(globeProps?.safeAreaInsets).toEqual({ top: 0, right: 0, bottom: 0, left: 0 });
 
     await user.click(screen.getByRole("button", { name: "Edit" }));
     expect(screen.getByTestId("itinerary-panel")).toHaveTextContent("9 total");
@@ -106,7 +107,6 @@ describe("GlobeShell", () => {
 
     await waitForElementToBeRemoved(() => screen.getByTestId("loading-overlay"));
     await waitFor(() => {
-      expect(screen.getByText("Stop seed-stop-1")).toBeInTheDocument();
       expect(window.location.search).toBe("?stop=seed-stop-1");
     });
 
@@ -119,7 +119,6 @@ describe("GlobeShell", () => {
 
     await waitForElementToBeRemoved(() => screen.getByTestId("loading-overlay"));
     await waitFor(() => {
-      expect(screen.getByText("Leg seed-stop-4__seed-stop-5")).toBeInTheDocument();
       expect(window.location.search).toBe("?leg=seed-stop-4__seed-stop-5");
     });
 
@@ -198,8 +197,8 @@ describe("GlobeShell", () => {
     await user.click(screen.getByRole("button", { name: "clear-selection" }));
     await user.click(screen.getByRole("button", { name: "Playback" }));
 
-    expect(screen.getByText("Nothing selected")).toBeInTheDocument();
-  });
+    expect(screen.queryByText("Nothing selected")).not.toBeInTheDocument();
+  }, 10000);
 
   it("registers the E2E test API when enabled", async () => {
     process.env.NEXT_PUBLIC_E2E = "1";

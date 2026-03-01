@@ -14,7 +14,14 @@ import {
 import { formatDistance } from "../../lib/data/formatters";
 import { loadDataset } from "../../lib/data/loadDataset";
 import { searchAirports } from "../../lib/data/search";
-import type { HoverState, ItineraryLeg, ItineraryStop } from "../../lib/data/types";
+import type {
+  GlobeSafeAreaInsets,
+  HoverState,
+  ItineraryLeg,
+  ItineraryStop,
+  ShellLayoutMode,
+  SheetSnapPoint,
+} from "../../lib/data/types";
 import type { CameraSnapshot } from "../../lib/globe/camera";
 import { resolveSeededItinerary } from "../../lib/itinerary/resolveStops";
 import { appReducer, initialAppState } from "../../lib/state/appState";
@@ -135,6 +142,15 @@ export function GlobeShell() {
   const [state, dispatch] = useReducer(appReducer, initialAppState);
   const [autoFollowSuspended, setAutoFollowSuspended] = useState(false);
   const [forceRecenterToken, setForceRecenterToken] = useState(0);
+  const [layoutMode, setLayoutMode] = useState<ShellLayoutMode>("mobile");
+  const [sheetSnapPoint, setSheetSnapPoint] = useState<SheetSnapPoint>("collapsed");
+  const [searchExpanded, setSearchExpanded] = useState(false);
+  const [safeAreaInsets, setSafeAreaInsets] = useState<GlobeSafeAreaInsets>({
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+  });
   const playbackStatusRef = useRef(state.playback.status);
   const playbackFrameIdRef = useRef<number | null>(null);
   const playbackLastTickRef = useRef<number | null>(null);
@@ -158,6 +174,9 @@ export function GlobeShell() {
     state.itinerary.legs
   );
   const selectedLeg = getSelectedLeg(state.selection, state.itinerary.legs);
+  const topBarRef = useRef<HTMLDivElement | null>(null);
+  const playbackRailRef = useRef<HTMLDivElement | null>(null);
+  const dockRef = useRef<HTMLDivElement | null>(null);
   const timelineSegments = useMemo(
     () => getTimelineSegments(state.itinerary.legs, state.itinerary.stops),
     [state.itinerary.legs, state.itinerary.stops]
@@ -200,6 +219,75 @@ export function GlobeShell() {
     mediaQuery.addEventListener("change", updateTouchMode);
     return () => mediaQuery.removeEventListener("change", updateTouchMode);
   }, []);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(max-width: 960px)");
+    const updateLayoutMode = () => {
+      setLayoutMode(mediaQuery.matches ? "mobile" : "desktop");
+    };
+
+    updateLayoutMode();
+    mediaQuery.addEventListener("change", updateLayoutMode);
+    return () => mediaQuery.removeEventListener("change", updateLayoutMode);
+  }, []);
+
+  useEffect(() => {
+    if (layoutMode !== "mobile") {
+      setSheetSnapPoint("collapsed");
+      return;
+    }
+
+    if (state.dockMode === "edit") {
+      setSheetSnapPoint("full");
+    }
+  }, [layoutMode, state.dockMode]);
+
+  useEffect(() => {
+    const topBar = topBarRef.current;
+    const playbackRail = playbackRailRef.current;
+    const dock = dockRef.current;
+
+    const updateInsets = () => {
+      if (layoutMode === "desktop") {
+        setSafeAreaInsets({
+          top: 0,
+          right: 0,
+          bottom: 0,
+          left: 0,
+        });
+        return;
+      }
+
+      const topInset = (topBar?.getBoundingClientRect().height ?? 0) + 16;
+      const playbackInset = (playbackRail?.getBoundingClientRect().height ?? 0) + 16;
+      const dockInset =
+        sheetSnapPoint !== "collapsed"
+          ? (dock?.getBoundingClientRect().height ?? 0) + 8
+          : 0;
+
+      setSafeAreaInsets({
+        top: topInset,
+        right: 0,
+        bottom: playbackInset + dockInset,
+        left: 0,
+      });
+    };
+
+    updateInsets();
+
+    const observer = new ResizeObserver(() => updateInsets());
+    if (topBar) {
+      observer.observe(topBar);
+    }
+    if (playbackRail) {
+      observer.observe(playbackRail);
+    }
+    if (dock) {
+      observer.observe(dock);
+    }
+
+    return () => observer.disconnect();
+  }, [layoutMode, sheetSnapPoint, state.dockCollapsed, state.dockMode]);
 
   useEffect(() => {
     if (state.loadState.status !== "ready" || state.itinerary.stops.length > 0) {
@@ -359,131 +447,328 @@ export function GlobeShell() {
     };
   }, [state.itinerary.legs, state.itinerary.stops, state.playback, state.selection]);
 
+  const handleSetMode = useCallback(
+    (mode: "playback" | "edit") => {
+      dispatch({ type: "dock/set-mode", mode });
+      if (layoutMode === "mobile") {
+        setSheetSnapPoint(mode === "edit" ? "full" : "half");
+      }
+    },
+    [layoutMode]
+  );
+
+  const handleToggleCollapsed = useCallback(() => {
+    if (layoutMode === "mobile") {
+      setSheetSnapPoint((current) =>
+        current === "collapsed" ? (state.dockMode === "edit" ? "full" : "half") : "collapsed"
+      );
+      return;
+    }
+
+    dispatch({ type: "dock/toggle-collapsed" });
+  }, [layoutMode, state.dockMode]);
+
+  const handleOpenEdit = useCallback(() => {
+    dispatch({ type: "dock/set-mode", mode: "edit" });
+    if (layoutMode === "mobile") {
+      setSheetSnapPoint("full");
+    }
+  }, [layoutMode]);
+
+  const handleSelectStop = useCallback(
+    (stopId: string) => {
+      dispatch({ type: "itinerary/select-stop", stopId });
+      if (layoutMode === "mobile") {
+        setSheetSnapPoint("full");
+      }
+    },
+    [layoutMode]
+  );
+
+  const handleSelectLeg = useCallback(
+    (legId: string) => {
+      dispatch({ type: "itinerary/select-leg", legId });
+      if (layoutMode === "mobile") {
+        setSheetSnapPoint("full");
+      }
+    },
+    [layoutMode]
+  );
+
   if (state.loadState.status === "error") {
     return <ErrorState message={state.loadState.message} onRetry={() => window.location.reload()} />;
   }
 
   return (
-    <main className={styles.shell}>
+    <main className={layoutMode === "desktop" ? styles.desktopShell : styles.mobileShell}>
       <div className={styles.backgroundGlow} />
       {dataset ? (
         <>
-          <GlobeCanvas
-            stops={state.itinerary.stops}
-            legs={state.itinerary.legs}
-            selection={state.selection}
-            playback={state.playback}
-            isTouchDevice={state.isTouchDevice}
-            enableHover={!state.isTouchDevice}
-            forceRecenterToken={forceRecenterToken}
-            onAutoFollowSuspendedChange={setAutoFollowSuspended}
-            onCameraStateChange={handleCameraStateChange}
-            onRenderStateChange={handleRenderStateChange}
-            onHoverStop={(stopId, x, y) =>
-              dispatch({ type: "hover/stop", stopId, x, y })
-            }
-            onHoverLeg={(legId, x, y) =>
-              dispatch({ type: "hover/leg", legId, x, y })
-            }
-            onClearHover={() => dispatch({ type: "hover/clear" })}
-            onSelectStop={(stopId) =>
-              dispatch({ type: "itinerary/select-stop", stopId })
-            }
-            onSelectLeg={(legId) =>
-              dispatch({ type: "itinerary/select-leg", legId })
-            }
-            onClearSelection={() => dispatch({ type: "selection/clear" })}
-          />
+          {layoutMode === "desktop" ? (
+            <div className={styles.desktopMain}>
+              <aside className={styles.desktopLeftRail}>
+                <div className={styles.desktopSearchWrap}>
+                  <SearchBox
+                    layoutMode={layoutMode}
+                    expanded={searchExpanded}
+                    query={state.searchQuery}
+                    results={searchResults}
+                    placeholder={
+                      state.searchIntent.kind === "replace-anchor"
+                        ? "Replace anchor with a city or airport"
+                        : "Add a city or airport"
+                    }
+                    onQueryChange={(value) => dispatch({ type: "search/query", value })}
+                    onFocus={() => setSearchExpanded(true)}
+                    onBlur={() => {
+                      if (state.searchQuery.trim().length === 0) {
+                        setSearchExpanded(false);
+                      }
+                    }}
+                    onSelect={(airport) => {
+                      setSearchExpanded(false);
+                      startTransition(() => {
+                        dispatch({ type: "itinerary/add-stop", airport });
+                      });
+                    }}
+                  />
+                </div>
 
-          <div className={styles.topBar}>
-            <SearchBox
-              query={state.searchQuery}
-              results={searchResults}
-              placeholder={
-                state.searchIntent.kind === "replace-anchor"
-                  ? "Replace anchor with a city or airport"
-                  : "Add a city or airport"
-              }
-              onQueryChange={(value) => dispatch({ type: "search/query", value })}
-              onSelect={(airport) => {
-                startTransition(() => {
-                  dispatch({ type: "itinerary/add-stop", airport });
-                });
-              }}
-            />
-          </div>
+                <div className={styles.desktopPlaybackPanel}>
+                  <TripPlaybackBar
+                    stops={state.itinerary.stops}
+                    legs={state.itinerary.legs}
+                    playback={state.playback}
+                    layoutMode={layoutMode}
+                    compact
+                    showRecenter={autoFollowSuspended && state.playback.status === "playing"}
+                    onPlay={() => dispatch({ type: "playback/play" })}
+                    onPause={() => dispatch({ type: "playback/pause" })}
+                    onReset={() => dispatch({ type: "playback/reset" })}
+                    onStepPrev={() => dispatch({ type: "playback/step-prev" })}
+                    onStepNext={() => dispatch({ type: "playback/step-next" })}
+                    onSpeedChange={(speed) => dispatch({ type: "playback/set-speed", speed })}
+                    onProgressChange={(progress) =>
+                      dispatch({ type: "playback/set-trip-progress", progress })
+                    }
+                    onOpenEdit={handleOpenEdit}
+                    onRecenter={() => {
+                      setAutoFollowSuspended(false);
+                      setForceRecenterToken((token) => token + 1);
+                    }}
+                  />
+                </div>
+              </aside>
 
-          <div className={styles.panelWrap}>
-            <ItineraryDock
-              stops={state.itinerary.stops}
-              legs={state.itinerary.legs}
-              selection={state.selection}
-              playback={state.playback}
-              mode={state.dockMode}
-              collapsed={state.dockCollapsed}
-              isTouchDevice={state.isTouchDevice}
-              showRecenter={autoFollowSuspended && state.playback.status === "playing"}
-              onSetMode={(mode) => dispatch({ type: "dock/set-mode", mode })}
-              onToggleCollapsed={() => dispatch({ type: "dock/toggle-collapsed" })}
-              onRecenter={() => {
-                setAutoFollowSuspended(false);
-                setForceRecenterToken((token) => token + 1);
-              }}
-              onSelectStop={(stopId) =>
-                dispatch({ type: "itinerary/select-stop", stopId })
-              }
-              onMoveStopUp={(stopId) =>
-                dispatch({ type: "itinerary/move-stop-up", stopId })
-              }
-              onMoveStopDown={(stopId) =>
-                dispatch({ type: "itinerary/move-stop-down", stopId })
-              }
-              onRemoveStop={(stopId) =>
-                dispatch({ type: "itinerary/remove-stop", stopId })
-              }
-              onInsertAfter={(index, stopId) => {
-                dispatch({ type: "itinerary/set-insert-index", index });
-                dispatch({ type: "itinerary/select-stop", stopId });
-              }}
-              onUpdateStop={(stopId, patch) =>
-                dispatch({ type: "itinerary/update-stop", stopId, patch })
-              }
-              onReplaceAnchor={(stopId) =>
-                dispatch({ type: "itinerary/replace-anchor", stopId })
-              }
-              onSetLegMode={(legId, mode) =>
-                dispatch({ type: "itinerary/set-leg-mode", legId, mode })
-              }
-              onPlayLeg={(legId) => {
-                dispatch({ type: "dock/set-mode", mode: "playback" });
-                dispatch({ type: "playback/jump-to-leg-start", legId });
-                dispatch({ type: "playback/play" });
-              }}
-            />
-          </div>
+              <section className={styles.desktopStage}>
+                <GlobeCanvas
+                  stops={state.itinerary.stops}
+                  legs={state.itinerary.legs}
+                  selection={state.selection}
+                  playback={state.playback}
+                  safeAreaInsets={safeAreaInsets}
+                  isTouchDevice={state.isTouchDevice}
+                  enableHover={!state.isTouchDevice}
+                  forceRecenterToken={forceRecenterToken}
+                  onAutoFollowSuspendedChange={setAutoFollowSuspended}
+                  onCameraStateChange={handleCameraStateChange}
+                  onRenderStateChange={handleRenderStateChange}
+                  onHoverStop={(stopId, x, y) =>
+                    dispatch({ type: "hover/stop", stopId, x, y })
+                  }
+                  onHoverLeg={(legId, x, y) =>
+                    dispatch({ type: "hover/leg", legId, x, y })
+                  }
+                  onClearHover={() => dispatch({ type: "hover/clear" })}
+                  onSelectStop={handleSelectStop}
+                  onSelectLeg={handleSelectLeg}
+                  onClearSelection={() => dispatch({ type: "selection/clear" })}
+                />
+              </section>
 
-          <div className={styles.playbackBarWrap}>
-            <TripPlaybackBar
-              stops={state.itinerary.stops}
-              legs={state.itinerary.legs}
-              playback={state.playback}
-              showRecenter={autoFollowSuspended && state.playback.status === "playing"}
-              onPlay={() => dispatch({ type: "playback/play" })}
-              onPause={() => dispatch({ type: "playback/pause" })}
-              onReset={() => dispatch({ type: "playback/reset" })}
-              onStepPrev={() => dispatch({ type: "playback/step-prev" })}
-              onStepNext={() => dispatch({ type: "playback/step-next" })}
-              onSpeedChange={(speed) => dispatch({ type: "playback/set-speed", speed })}
-              onProgressChange={(progress) =>
-                dispatch({ type: "playback/set-trip-progress", progress })
-              }
-              onOpenEdit={() => dispatch({ type: "dock/set-mode", mode: "edit" })}
-              onRecenter={() => {
-                setAutoFollowSuspended(false);
-                setForceRecenterToken((token) => token + 1);
-              }}
-            />
-          </div>
+              <div className={styles.desktopDockWrap} ref={dockRef}>
+                <ItineraryDock
+                  stops={state.itinerary.stops}
+                  legs={state.itinerary.legs}
+                  selection={state.selection}
+                  playback={state.playback}
+                  layoutMode={layoutMode}
+                  shellState={{
+                    mode: state.dockMode,
+                    collapsed: state.dockCollapsed,
+                  }}
+                  showRecenter={autoFollowSuspended && state.playback.status === "playing"}
+                  onSetMode={handleSetMode}
+                  onToggleCollapsed={handleToggleCollapsed}
+                  onRecenter={() => {
+                    setAutoFollowSuspended(false);
+                    setForceRecenterToken((token) => token + 1);
+                  }}
+                  onSelectStop={handleSelectStop}
+                  onMoveStopUp={(stopId) =>
+                    dispatch({ type: "itinerary/move-stop-up", stopId })
+                  }
+                  onMoveStopDown={(stopId) =>
+                    dispatch({ type: "itinerary/move-stop-down", stopId })
+                  }
+                  onRemoveStop={(stopId) =>
+                    dispatch({ type: "itinerary/remove-stop", stopId })
+                  }
+                  onInsertAfter={(index, stopId) => {
+                    dispatch({ type: "itinerary/set-insert-index", index });
+                    handleSelectStop(stopId);
+                  }}
+                  onUpdateStop={(stopId, patch) =>
+                    dispatch({ type: "itinerary/update-stop", stopId, patch })
+                  }
+                  onReplaceAnchor={(stopId) =>
+                    dispatch({ type: "itinerary/replace-anchor", stopId })
+                  }
+                  onSetLegMode={(legId, mode) =>
+                    dispatch({ type: "itinerary/set-leg-mode", legId, mode })
+                  }
+                  onPlayLeg={(legId) => {
+                    dispatch({ type: "dock/set-mode", mode: "playback" });
+                    dispatch({ type: "playback/jump-to-leg-start", legId });
+                    dispatch({ type: "playback/play" });
+                  }}
+                />
+              </div>
+            </div>
+          ) : null}
+
+          {layoutMode === "mobile" ? (
+            <>
+              <div className={styles.mobileTopBar} ref={topBarRef}>
+                <SearchBox
+                  layoutMode={layoutMode}
+                  expanded={searchExpanded}
+                  query={state.searchQuery}
+                  results={searchResults}
+                  placeholder={
+                    state.searchIntent.kind === "replace-anchor"
+                      ? "Replace anchor with a city or airport"
+                      : "Add a city or airport"
+                  }
+                  onQueryChange={(value) => dispatch({ type: "search/query", value })}
+                  onFocus={() => setSearchExpanded(true)}
+                  onBlur={() => {
+                    if (state.searchQuery.trim().length === 0) {
+                      setSearchExpanded(false);
+                    }
+                  }}
+                  onSelect={(airport) => {
+                    setSearchExpanded(false);
+                    startTransition(() => {
+                      dispatch({ type: "itinerary/add-stop", airport });
+                    });
+                  }}
+                />
+              </div>
+
+              <section className={styles.mobileStage}>
+                <GlobeCanvas
+                  stops={state.itinerary.stops}
+                  legs={state.itinerary.legs}
+                  selection={state.selection}
+                  playback={state.playback}
+                  safeAreaInsets={safeAreaInsets}
+                  isTouchDevice={state.isTouchDevice}
+                  enableHover={!state.isTouchDevice}
+                  forceRecenterToken={forceRecenterToken}
+                  onAutoFollowSuspendedChange={setAutoFollowSuspended}
+                  onCameraStateChange={handleCameraStateChange}
+                  onRenderStateChange={handleRenderStateChange}
+                  onHoverStop={(stopId, x, y) =>
+                    dispatch({ type: "hover/stop", stopId, x, y })
+                  }
+                  onHoverLeg={(legId, x, y) =>
+                    dispatch({ type: "hover/leg", legId, x, y })
+                  }
+                  onClearHover={() => dispatch({ type: "hover/clear" })}
+                  onSelectStop={handleSelectStop}
+                  onSelectLeg={handleSelectLeg}
+                  onClearSelection={() => dispatch({ type: "selection/clear" })}
+                />
+              </section>
+
+              <div className={styles.mobilePlaybackRail} ref={playbackRailRef}>
+                <TripPlaybackBar
+                  stops={state.itinerary.stops}
+                  legs={state.itinerary.legs}
+                  playback={state.playback}
+                  layoutMode={layoutMode}
+                  compact
+                  showRecenter={autoFollowSuspended && state.playback.status === "playing"}
+                  onPlay={() => dispatch({ type: "playback/play" })}
+                  onPause={() => dispatch({ type: "playback/pause" })}
+                  onReset={() => dispatch({ type: "playback/reset" })}
+                  onStepPrev={() => dispatch({ type: "playback/step-prev" })}
+                  onStepNext={() => dispatch({ type: "playback/step-next" })}
+                  onSpeedChange={(speed) => dispatch({ type: "playback/set-speed", speed })}
+                  onProgressChange={(progress) =>
+                    dispatch({ type: "playback/set-trip-progress", progress })
+                  }
+                  onOpenEdit={handleOpenEdit}
+                  onRecenter={() => {
+                    setAutoFollowSuspended(false);
+                    setForceRecenterToken((token) => token + 1);
+                  }}
+                />
+              </div>
+
+              <div className={styles.mobileBottomSheet} ref={dockRef}>
+                <ItineraryDock
+                  stops={state.itinerary.stops}
+                  legs={state.itinerary.legs}
+                  selection={state.selection}
+                  playback={state.playback}
+                  layoutMode={layoutMode}
+                  shellState={{
+                    mode: state.dockMode,
+                    collapsed: sheetSnapPoint === "collapsed",
+                    snapPoint: sheetSnapPoint,
+                  }}
+                  showRecenter={autoFollowSuspended && state.playback.status === "playing"}
+                  onSetMode={handleSetMode}
+                  onToggleCollapsed={handleToggleCollapsed}
+                  onRecenter={() => {
+                    setAutoFollowSuspended(false);
+                    setForceRecenterToken((token) => token + 1);
+                  }}
+                  onSelectStop={handleSelectStop}
+                  onMoveStopUp={(stopId) =>
+                    dispatch({ type: "itinerary/move-stop-up", stopId })
+                  }
+                  onMoveStopDown={(stopId) =>
+                    dispatch({ type: "itinerary/move-stop-down", stopId })
+                  }
+                  onRemoveStop={(stopId) =>
+                    dispatch({ type: "itinerary/remove-stop", stopId })
+                  }
+                  onInsertAfter={(index, stopId) => {
+                    dispatch({ type: "itinerary/set-insert-index", index });
+                    handleSelectStop(stopId);
+                  }}
+                  onUpdateStop={(stopId, patch) =>
+                    dispatch({ type: "itinerary/update-stop", stopId, patch })
+                  }
+                  onReplaceAnchor={(stopId) =>
+                    dispatch({ type: "itinerary/replace-anchor", stopId })
+                  }
+                  onSetLegMode={(legId, mode) =>
+                    dispatch({ type: "itinerary/set-leg-mode", legId, mode })
+                  }
+                  onPlayLeg={(legId) => {
+                    setSheetSnapPoint("half");
+                    dispatch({ type: "dock/set-mode", mode: "playback" });
+                    dispatch({ type: "playback/jump-to-leg-start", legId });
+                    dispatch({ type: "playback/play" });
+                  }}
+                />
+              </div>
+            </>
+          ) : null}
 
           {hoverContent ? (
             <Tooltip

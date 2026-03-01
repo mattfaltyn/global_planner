@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import Globe, { type GlobeMethods } from "react-globe.gl";
 import {
   Color,
@@ -11,6 +11,7 @@ import {
 } from "three";
 import countries from "../../lib/data/countries.json";
 import type {
+  GlobeSafeAreaInsets,
   GlobePointDatum,
   ItineraryLeg,
   ItinerarySelection,
@@ -51,6 +52,7 @@ type GlobeCanvasProps = {
   legs: ItineraryLeg[];
   selection: ItinerarySelection;
   playback: PlaybackState;
+  safeAreaInsets?: GlobeSafeAreaInsets;
   isTouchDevice?: boolean;
   enableHover: boolean;
   forceRecenterToken?: number;
@@ -229,6 +231,7 @@ export function GlobeCanvas({
   legs,
   selection,
   playback,
+  safeAreaInsets = { top: 0, right: 0, bottom: 0, left: 0 },
   isTouchDevice = false,
   enableHover,
   forceRecenterToken = 0,
@@ -695,7 +698,19 @@ export function GlobeCanvas({
   ]);
 
   return (
-    <div className={styles.canvas} ref={containerRef} data-testid="globe-canvas">
+    <div
+      className={styles.canvas}
+      ref={containerRef}
+      data-testid="globe-canvas"
+      style={
+        {
+          "--safe-top": `${safeAreaInsets.top}px`,
+          "--safe-right": `${safeAreaInsets.right}px`,
+          "--safe-bottom": `${safeAreaInsets.bottom}px`,
+          "--safe-left": `${safeAreaInsets.left}px`,
+        } as CSSProperties
+      }
+    >
       <Globe
         ref={globeRef}
         width={size.width}

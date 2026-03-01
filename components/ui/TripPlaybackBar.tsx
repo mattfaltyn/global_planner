@@ -1,4 +1,10 @@
-import type { ItineraryLeg, ItineraryStop, PlaybackSpeed, PlaybackState } from "../../lib/data/types";
+import type {
+  ItineraryLeg,
+  ItineraryStop,
+  PlaybackSpeed,
+  PlaybackState,
+  ShellLayoutMode,
+} from "../../lib/data/types";
 import {
   getActiveLegLabel,
   getPlaybackCalendarProgressPercent,
@@ -12,6 +18,8 @@ type TripPlaybackBarProps = {
   stops: ItineraryStop[];
   legs: ItineraryLeg[];
   playback: PlaybackState;
+  layoutMode?: ShellLayoutMode;
+  compact?: boolean;
   showRecenter?: boolean;
   onPlay: () => void;
   onPause: () => void;
@@ -28,6 +36,8 @@ export function TripPlaybackBar({
   stops,
   legs,
   playback,
+  layoutMode = "desktop",
+  compact = false,
   showRecenter = false,
   onPlay,
   onPause,
@@ -42,9 +52,16 @@ export function TripPlaybackBar({
   const { currentStop, nextStop } = getCurrentStopPair(stops, playback, legs);
   const daySummary = getPlaybackDaySummary(stops, legs, playback);
   const progressPercent = getPlaybackCalendarProgressPercent(stops, legs, playback);
+  const railClassName = [
+    styles.bar,
+    layoutMode === "mobile" ? styles.mobileBar : styles.desktopBar,
+    compact ? styles.compactBar : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
-    <section className={styles.bar} data-testid="trip-playback-bar">
+    <section className={railClassName} data-layout-mode={layoutMode} data-testid="trip-playback-bar">
       <div className={styles.header}>
         <div className={styles.meta}>
           <p className={styles.kicker}>Trip playback</p>
@@ -58,7 +75,7 @@ export function TripPlaybackBar({
         </div>
 
         {daySummary ? (
-          <div className={styles.dayCard}>
+          <div className={styles.dayMeta}>
             <p className={styles.dayKicker}>Trip day</p>
             <p className={styles.dayValue}>
               Day {daySummary.currentDay} of {daySummary.totalDays}
@@ -96,7 +113,7 @@ export function TripPlaybackBar({
             <option value="4">4x</option>
           </select>
           <button type="button" className={styles.secondaryButton} onClick={onOpenEdit}>
-            Edit trip
+            {layoutMode === "mobile" ? "Edit" : "Edit trip"}
           </button>
           {showRecenter ? (
             <button

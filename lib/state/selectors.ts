@@ -98,8 +98,7 @@ export function serializeSelectionToQuery(selection: SelectionState) {
     params.set("route", selection.routeId);
   }
 
-  const query = params.toString();
-  return query ? `?${query}` : "";
+  return `?${params.toString()}`;
 }
 
 export function parseSelectionFromQuery(

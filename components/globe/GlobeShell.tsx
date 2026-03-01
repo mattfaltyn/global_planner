@@ -48,7 +48,7 @@ declare global {
   }
 }
 
-function getHoverContent(
+export function getHoverContent(
   hover: HoverState,
   dataset: LoadedDataset
 ): { x: number; y: number; title: string; lines: string[] } | null {

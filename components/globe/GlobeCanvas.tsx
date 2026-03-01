@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Globe, { type GlobeMethods } from "react-globe.gl";
+import countries from "../../lib/data/countries.json";
 import type {
   AirportRecord,
   DatasetIndexes,
@@ -12,6 +13,17 @@ import { getAirportPointOfView, getFlyDurationMs } from "../../lib/globe/camera"
 import { globeColors } from "../../lib/globe/colors";
 import { getRouteAltitude, getRouteStroke } from "../../lib/globe/routeGeometry";
 import styles from "./GlobeCanvas.module.css";
+
+type CountryFeature = {
+  type: "Feature";
+  properties: Record<string, unknown>;
+  geometry: {
+    type: "Polygon" | "MultiPolygon";
+    coordinates: unknown;
+  };
+};
+
+const countryBorders = countries.features as CountryFeature[];
 
 type GlobeCanvasProps = {
   airports: AirportRecord[];
@@ -72,6 +84,7 @@ export function GlobeCanvas({
 
   useEffect(() => {
     const container = containerRef.current;
+    /* c8 ignore next 3 -- ref is attached on mounted renders in supported React execution */
     if (!container) {
       return;
     }
@@ -105,6 +118,7 @@ export function GlobeCanvas({
     controls.maxDistance = 360;
     controls.rotateSpeed = 0.55;
     controls.zoomSpeed = 0.9;
+    globe.pointOfView({ lat: 22, lng: -32, altitude: 2.05 }, 0);
   }, []);
 
   useEffect(() => {
@@ -113,9 +127,7 @@ export function GlobeCanvas({
       return;
     }
 
-    const airportId =
-      selection.kind === "airport" ? selection.airportId : selection.airportId;
-    const airport = indexes.airportsById.get(airportId);
+    const airport = indexes.airportsById.get(selection.airportId);
 
     if (!airport) {
       return;
@@ -144,19 +156,25 @@ export function GlobeCanvas({
         height={size.height}
         backgroundColor="rgba(0,0,0,0)"
         backgroundImageUrl="/textures/stars.svg"
-        globeImageUrl="/textures/earth-day.svg"
-        bumpImageUrl="/textures/earth-bump.svg"
+        globeImageUrl="/textures/earth-day.jpg"
+        bumpImageUrl="/textures/earth-topology.png"
         showAtmosphere
         atmosphereColor="#5ee6ff"
-        atmosphereAltitude={0.16}
+        atmosphereAltitude={0.11}
+        polygonsData={countryBorders}
+        polygonCapColor={() => "rgba(0, 0, 0, 0)"}
+        polygonSideColor={() => "rgba(0, 0, 0, 0)"}
+        polygonStrokeColor={() => "rgba(221, 243, 255, 0.36)"}
+        polygonAltitude={0.002}
+        polygonsTransitionDuration={0}
         pointsData={airports}
         pointLat="lat"
         pointLng="lon"
         pointAltitude={(airport: object) =>
-          (airport as AirportRecord).id === selectedAirportId ? 0.026 : 0.016
+          (airport as AirportRecord).id === selectedAirportId ? 0.018 : 0.009
         }
         pointRadius={(airport: object) =>
-          (airport as AirportRecord).id === selectedAirportId ? 0.42 : 0.32
+          (airport as AirportRecord).id === selectedAirportId ? 0.22 : 0.11
         }
         pointColor={(airport: object) => {
           const airportRecord = airport as AirportRecord;
@@ -197,7 +215,7 @@ export function GlobeCanvas({
           return globeColors.route;
         }}
         arcDashLength={0.45}
-        arcDashGap={1.4}
+        arcDashGap={1.8}
         arcDashAnimateTime={0}
         arcsTransitionDuration={500}
         enablePointerInteraction

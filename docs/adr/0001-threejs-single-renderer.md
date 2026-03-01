@@ -1,17 +1,36 @@
-# ADR 0001: Use A Single Three.js-Based Renderer For V1
+# ADR 0001: Use A Single Three.js-Based Globe Renderer For V1
 
 ## Status
 
 Accepted
 
+## Date
+
+2026-03-01
+
 ## Context
 
-The original product spec proposed a dual-canvas composition:
+The original product spec proposed a dual-layer rendering model:
 
-- Three.js for the Earth beauty layer
-- deck.gl `GlobeView` for airport and route overlays
+- a custom Three.js globe for the Earth and atmosphere
+- a transparent deck.gl `GlobeView` overlay for airports and routes
 
-That architecture increases implementation complexity and depends on `GlobeView`, which deck.gl still documents as experimental. The documented camera limitations conflict with the desired synced-orbit experience for v1.
+That design is attractive in theory, but it introduces extra coordination cost:
+
+- two rendering surfaces
+- two camera models
+- cross-layer interaction synchronization
+- more complex testing and debugging
+
+For v1, the product needed a reliable path to:
+
+- orbit and zoom interactions
+- hover and click picking
+- smooth airport fly-to
+- static deployment on Vercel
+- maintainable tests
+
+The original spec also depended on deck.gl `GlobeView`, which the official docs still describe as experimental and document with camera limitations that do not align cleanly with the intended synced-orbit experience.
 
 References:
 
@@ -20,33 +39,78 @@ References:
 
 ## Decision
 
-V1 uses a single Three.js-based renderer via `react-globe.gl`.
+V1 uses a single Three.js-based globe renderer via `react-globe.gl`.
 
-The library provides:
+The chosen stack provides:
 
-- textured globe rendering
-- atmosphere/background support
-- point and arc layers
+- globe rendering
+- atmosphere support
+- background imagery
+- airport point rendering
+- route arc rendering
 - orbit controls
-- picking hooks
-- camera fly-to APIs
+- hover and click hooks
+- camera `pointOfView` fly-to support
 
-Application state, dataset transforms, search, tooltip rendering, and detail panel behavior remain in local app code.
+Application logic remains local to the repo:
+
+- dataset generation
+- dataset loading
+- search
+- URL state
+- selection reducers
+- side-panel UI
+- tooltip rendering
+
+## Why This Was Better For V1
+
+This decision optimizes for shipping a robust first release, not for maximum rendering purity.
+
+Benefits:
+
+- one camera system instead of syncing two
+- simpler interaction handling
+- lower implementation risk
+- lower regression risk during refactors
+- easier component testing with focused mocks
 
 ## Consequences
 
 Positive:
 
-- simpler orbit camera behavior
-- no cross-canvas sync layer
-- lower implementation and test risk
-- easier route and airport picking
+- faster path to a stable product
+- less custom rendering glue code
+- easier onboarding for contributors
+- cleaner mental model for debugging selection and hover issues
 
 Tradeoffs:
 
-- less faithful to the original deck.gl layering spec
-- fewer low-level rendering customization points than a fully bespoke Three.js scene
+- less faithful to the original spec architecture
+- fewer low-level rendering extension points than a bespoke Three.js scene
+- future extremely high-density rendering work may require reevaluation
 
-## Follow-Up
+## Alternatives Considered
 
-If v2 needs more specialized visual layers or higher airport/route density, reevaluate a custom Three.js scene or a more mature globe-overlay stack.
+### Three.js + deck.gl `GlobeView`
+
+Rejected for v1 because:
+
+- experimental API surface
+- more moving parts
+- more difficult camera and picking coordination
+
+### Fully custom Three.js scene
+
+Rejected for v1 because:
+
+- more time to implement
+- custom picking and route rendering would add product risk
+- unnecessary complexity for the current data size
+
+## Revisit Criteria
+
+Revisit this ADR if one of these becomes true:
+
+- the route or airport density materially outgrows current renderer performance
+- v2 requires specialized layered effects not supported cleanly by `react-globe.gl`
+- the project needs lower-level rendering control than the current abstraction can provide

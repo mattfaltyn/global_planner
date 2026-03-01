@@ -77,6 +77,28 @@ describe("buildDataset helpers", () => {
     expect(airport.iata).toBeNull();
     expect(airport.icao).toBeNull();
     expect(airport.tzName).toBeNull();
+    expect(airport.altitudeFt).toBe(400);
+  });
+
+  it("normalizes nullable altitude values", () => {
+    const airport = normalizeAirportRow({
+      "Airport ID": "5",
+      Name: "Sea Level Airport",
+      City: "Sea City",
+      Country: "Sea Land",
+      IATA: "SEA",
+      ICAO: "SEAA",
+      Latitude: "12",
+      Longitude: "24",
+      Altitude: "\\N",
+      Timezone: "0",
+      DST: "U",
+      "Tz database time zone": "Etc/UTC",
+      Type: "airport",
+      Source: "OurAirports",
+    });
+
+    expect(airport.altitudeFt).toBeNull();
   });
 
   it("keeps only nonstop routes", () => {
@@ -104,6 +126,82 @@ XX,1,AAA,1,CCC,3,,1,738`);
     expect(dataset.manifest.airportCount).toBe(34);
     expect(dataset.routes[0].id).toContain("__");
     expect(dataset.routes[0].directionality).toBe("bidirectional");
+  });
+
+  it("preserves one-way routes and ignores invalid endpoints", () => {
+    const airportsCsv = buildDenseAirportsCsv()
+      .split("\n")
+      .slice(0, 32)
+      .join("\n");
+    const routeLines = [
+      "Airline,Airline ID,Source airport,Source airport ID,Destination airport,Destination airport ID,Codeshare,Stops,Equipment",
+    ];
+
+    for (let source = 1; source <= 31; source += 1) {
+      for (let destination = source + 1; destination <= 31; destination += 1) {
+        routeLines.push(`XX,1,S${source},${source},D${destination},${destination},,0,738`);
+        if (!(source === 1 && destination === 2)) {
+          routeLines.push(`XX,1,D${destination},${destination},S${source},${source},,0,738`);
+        }
+      }
+    }
+
+    routeLines.push("XX,1,S1,1,Missing,\\N,,0,738");
+    routeLines.push("XX,1,S1,1,Missing,32,,0,738");
+
+    const dataset = buildDatasetFromSources(airportsCsv, routeLines.join("\n"));
+    const oneWayRoute = dataset.routes.find((route) => route.id === "1__2");
+
+    expect(oneWayRoute?.directionality).toBe("one-way");
+    expect(dataset.routes.some((route) => route.airportAId === "1" && route.airportBId === "999")).toBe(false);
+  });
+
+  it("sorts airports deterministically by name then id", () => {
+    const airportsLines = [
+      "Airport ID,Name,City,Country,IATA,ICAO,Latitude,Longitude,Altitude,Timezone,DST,Tz database time zone,Type,Source",
+    ];
+
+    for (let index = 1; index <= 31; index += 1) {
+      airportsLines.push(
+        [
+          index,
+          index <= 2 ? "Shared Name" : `Airport ${index}`,
+          `City ${index}`,
+          "Testland",
+          `A${String(index).padStart(2, "0")}`,
+          `ICA${String(index).padStart(2, "0")}`,
+          10 + index,
+          20 + index,
+          100 + index,
+          0,
+          "U",
+          "Etc/UTC",
+          "airport",
+          "OurAirports",
+        ].join(",")
+      );
+    }
+
+    const routeLines = [
+      "Airline,Airline ID,Source airport,Source airport ID,Destination airport,Destination airport ID,Codeshare,Stops,Equipment",
+    ];
+
+    for (let source = 1; source <= 31; source += 1) {
+      for (let destination = source + 1; destination <= 31; destination += 1) {
+        routeLines.push(`XX,1,S${source},${source},D${destination},${destination},,0,738`);
+        routeLines.push(`XX,1,D${destination},${destination},S${source},${source},,0,738`);
+      }
+    }
+
+    const dataset = buildDatasetFromSources(
+      airportsLines.join("\n"),
+      routeLines.join("\n")
+    );
+    const sharedNameIds = dataset.airports
+      .filter((airport) => airport.name === "Shared Name")
+      .map((airport) => airport.id);
+
+    expect(sharedNameIds).toEqual(["1", "2"]);
   });
 
   it("computes distance and duration helpers", () => {

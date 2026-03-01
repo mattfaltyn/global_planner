@@ -1,0 +1,99 @@
+.bar {
+  display: grid;
+  gap: 14px;
+  width: min(1040px, calc(100vw - 48px));
+  padding: 16px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 24px;
+  background: rgba(8, 16, 30, 0.88);
+  backdrop-filter: blur(20px);
+  box-shadow: var(--shadow);
+}
+
+.meta {
+  display: grid;
+  gap: 4px;
+}
+
+.kicker,
+.stopLabel,
+.sliderLabel {
+  margin: 0;
+  color: var(--muted);
+}
+
+.kicker {
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 0.72rem;
+}
+
+.routeLabel {
+  margin: 0;
+  font-size: 1.25rem;
+  font-family: var(--font-display), Georgia, serif;
+}
+
+.phase {
+  color: var(--accent);
+}
+
+.controls {
+  display: grid;
+  gap: 12px;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.primaryButton,
+.secondaryButton,
+.speedSelect {
+  border: 0;
+  border-radius: 14px;
+  color: var(--text);
+}
+
+.primaryButton,
+.secondaryButton {
+  padding: 10px 12px;
+}
+
+.primaryButton {
+  background: rgba(91, 235, 255, 0.18);
+}
+
+.secondaryButton {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.speedSelect {
+  background: rgba(255, 255, 255, 0.06);
+  padding: 10px 12px;
+}
+
+.sliderWrap {
+  display: grid;
+  gap: 8px;
+}
+
+.slider {
+  width: 100%;
+}
+
+@media (max-width: 960px) {
+  .bar {
+    width: calc(100vw - 24px);
+    padding: 14px;
+    border-radius: 22px;
+  }
+
+  .routeLabel {
+    font-size: 1.05rem;
+  }
+}

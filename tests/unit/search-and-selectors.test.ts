@@ -7,8 +7,14 @@ import {
 import {
   advancePlaybackState,
   createInitialPlaybackState,
-  getPlaybackLegDurationMs,
+  jumpPlaybackToLegStart,
 } from "../../lib/itinerary/playback";
+import {
+  buildTimelineSegments,
+  getTimelineFrameFromTripProgress,
+  getTotalTimelineDurationMs,
+  getTripProgressFromLegPosition,
+} from "../../lib/itinerary/timeline";
 import {
   buildStopFromAirport,
   getDayCount,
@@ -21,6 +27,7 @@ import {
   serializeItinerarySelectionToQuery,
 } from "../../lib/itinerary/urls";
 import {
+  getItineraryFitPointOfView,
   getLegByIndex,
   getPlaybackProgressPercent,
   getSelectedLeg,
@@ -206,6 +213,14 @@ describe("itinerary search, selectors, and helpers", () => {
 
   it("selects itinerary entities and computes summary selectors", () => {
     const { stops, legs } = createResolvedFixtureItinerary();
+    const playback = {
+      status: "paused" as const,
+      speed: 1 as const,
+      tripProgress: 0.34,
+      activeLegIndex: 2,
+      activeLegProgress: 0.1,
+      phase: "travel" as const,
+    };
 
     expect(getSelectedStop({ kind: "stop", stopId: "seed-stop-1" }, stops)?.label).toBe("Porto");
     expect(getSelectedStop(null, stops)).toBeNull();
@@ -221,80 +236,72 @@ describe("itinerary search, selectors, and helpers", () => {
       end: "2026-04-10",
     });
     expect(getTripDateSpan([{ ...stops[0], departureDate: null }])).toBeNull();
-    expect(getPlaybackProgressPercent({
-      status: "paused",
-      activeLegIndex: 0,
-      progress: 0.335,
-      speed: 1,
-      dwellRemainingMs: 0,
-    })).toBe(34);
+    expect(getPlaybackProgressPercent(playback)).toBe(34);
+    const itineraryPointOfView = getItineraryFitPointOfView(stops);
+    expect(itineraryPointOfView.lat).toBeGreaterThan(35);
+    expect(itineraryPointOfView.lat).toBeLessThan(45);
+    expect(itineraryPointOfView.lng).toBeLessThan(-10);
+    expect(itineraryPointOfView.lng).toBeGreaterThan(-90);
+    expect(itineraryPointOfView.altitude).toBeGreaterThanOrEqual(2.55);
   });
 
-  it("interpolates traveler position and advances playback", () => {
+  it("builds whole-trip timeline frames, low path endpoints, and playback progression", () => {
     const { stops, legs } = createResolvedFixtureItinerary();
     const playback = createInitialPlaybackState();
+    const segments = buildTimelineSegments(legs);
+    const midAirProgress = getTripProgressFromLegPosition(segments, 0, 0.5, "travel", 1);
+    const dwellProgress = getTripProgressFromLegPosition(segments, 0, 0, "dwell", 1);
+    const midAirFrame = getTimelineFrameFromTripProgress(segments, midAirProgress, 1);
+    const dwellFrame = getTimelineFrameFromTripProgress(
+      segments,
+      Math.min(1, dwellProgress + 0.001),
+      1
+    );
+    const startedAtLegFour = jumpPlaybackToLegStart(playback, legs, 4);
+    const progressed = advancePlaybackState({ ...playback, status: "playing" }, legs, 1000);
+    const completed = advancePlaybackState({ ...playback, status: "playing" }, legs, 50_000);
+    const airPath = buildLegPathPoints(stops[0], stops[1], "air");
+    const groundPath = buildLegPathPoints(stops[1], stops[2], "ground");
 
-    expect(getPlaybackLegDurationMs(legs[0], 1)).toBe(2200);
-    expect(getPlaybackLegDurationMs(legs[1], 2)).toBe(1600);
+    expect(segments).toHaveLength(15);
+    expect(segments[0]).toMatchObject({ kind: "travel", legIndex: 0, durationMs: 1800 });
+    expect(segments[1]).toMatchObject({ kind: "dwell", legIndex: 0, durationMs: 700 });
+    expect(getTotalTimelineDurationMs(segments, 1)).toBe(22900);
+    expect(midAirFrame).toMatchObject({
+      activeLegIndex: 0,
+      phase: "travel",
+    });
+    expect(midAirFrame.activeLegProgress).toBeCloseTo(0.5, 2);
+    expect(dwellFrame).toMatchObject({
+      activeLegIndex: 0,
+      phase: "dwell",
+      activeLegProgress: 1,
+    });
+    expect(startedAtLegFour.activeLegIndex).toBe(4);
+    expect(progressed.tripProgress).toBeGreaterThan(0);
+    expect(progressed.status).toBe("playing");
+    expect(completed).toMatchObject({
+      status: "paused",
+      tripProgress: 1,
+      activeLegIndex: legs.length - 1,
+      activeLegProgress: 1,
+    });
+
+    expect(airPath[0]?.lat).toBeCloseTo(stops[0].lat ?? 0, 6);
+    expect(airPath[0]?.lon).toBeCloseTo(stops[0].lon ?? 0, 6);
+    expect(airPath[0]?.altitude).toBeCloseTo(0, 12);
+    expect(airPath.at(-1)?.lat).toBeCloseTo(stops[1].lat ?? 0, 6);
+    expect(airPath.at(-1)?.lon).toBeCloseTo(stops[1].lon ?? 0, 6);
+    expect(airPath.at(-1)?.altitude).toBeCloseTo(0, 12);
+    expect(Math.max(...airPath.map((point) => point.altitude))).toBeLessThanOrEqual(0.028);
+    expect(groundPath[0]?.altitude).toBe(0);
+    expect(groundPath.at(-1)?.altitude).toBe(0);
+
     expect(interpolateTravelerPosition(legs[0], 0)?.lat).toBe(legs[0].pathPoints[0].lat);
     expect(interpolateTravelerPosition(legs[0], 1)?.lon).toBe(
       legs[0].pathPoints.at(-1)?.lon
     );
     expect(interpolateTravelerPosition({ ...legs[0], pathPoints: [] }, 0.5)).toBeNull();
-
-    const playing = { ...playback, status: "playing" as const };
-    const progressed = advancePlaybackState(playing, legs, 1100);
-    const dwelling = advancePlaybackState(
-      { ...playing, activeLegIndex: 0, progress: 1, dwellRemainingMs: 500 },
-      legs,
-      250
-    );
-    const nextLeg = advancePlaybackState(
-      { ...playing, activeLegIndex: 0, progress: 0.99 },
-      legs,
-      100
-    );
-    const dwellElapsed = advancePlaybackState(
-      { ...playing, activeLegIndex: 0, progress: 0, dwellRemainingMs: 50 },
-      legs,
-      100
-    );
-    const completed = advancePlaybackState(
-      { ...playing, activeLegIndex: legs.length - 1, progress: 0.99 },
-      legs,
-      100
-    );
-    const paused = advancePlaybackState(
-      { ...playback, status: "paused" },
-      legs,
-      100
-    );
-    const noLegs = advancePlaybackState(playing, [], 100);
-    const missingLeg = advancePlaybackState(
-      { ...playing, activeLegIndex: 99 },
-      legs,
-      100
-    );
-
-    expect(progressed.progress).toBeCloseTo(0.5, 1);
-    expect(dwelling.dwellRemainingMs).toBe(250);
-    expect(dwellElapsed.dwellRemainingMs).toBe(0);
-    expect(nextLeg).toMatchObject({
-      activeLegIndex: 1,
-      progress: 0,
-      dwellRemainingMs: 700,
-    });
-    expect(completed).toMatchObject({
-      status: "paused",
-      progress: 1,
-      dwellRemainingMs: 0,
-    });
-    expect(paused).toEqual({ ...playback, status: "paused" });
-    expect(noLegs).toEqual(playing);
-    expect(missingLeg).toMatchObject({
-      status: "paused",
-      progress: 1,
-    });
     expect(
       buildLegPathPoints(
         { ...stops[0], lat: null },

@@ -76,13 +76,24 @@ function interpolateGreatCirclePoint(
   };
 }
 
-function easeInOut(progress: number) {
-  return 0.5 - Math.cos(progress * Math.PI) / 2;
+function getAirPeakAltitude(distanceKm: number) {
+  if (distanceKm <= 400) {
+    return 0.006;
+  }
+
+  if (distanceKm <= 1200) {
+    return 0.012;
+  }
+
+  if (distanceKm <= 6000) {
+    return 0.018;
+  }
+
+  return Math.min(0.028, 0.022 + distanceKm / 2000000);
 }
 
-function getAirAltitude(progress: number) {
-  const eased = easeInOut(progress);
-  return 0.04 + Math.sin(eased * Math.PI) * 0.14;
+function getAirAltitude(progress: number, peakAltitude: number) {
+  return peakAltitude * Math.sin(progress * Math.PI) ** 2;
 }
 
 function buildPathPoints(
@@ -92,8 +103,10 @@ function buildPathPoints(
   toLon: number,
   mode: TravelMode
 ) {
-  const steps = mode === "air" ? 32 : 20;
+  const steps = mode === "air" ? 64 : 24;
   const points: PathPoint[] = [];
+  const distanceKm = haversineDistanceKm(fromLat, fromLon, toLat, toLon);
+  const peakAltitude = getAirPeakAltitude(distanceKm);
 
   for (let index = 0; index <= steps; index += 1) {
     const progress = index / steps;
@@ -108,7 +121,12 @@ function buildPathPoints(
     points.push({
       lat: position.lat,
       lon: position.lon,
-      altitude: mode === "air" ? getAirAltitude(progress) : 0.002,
+      altitude:
+        mode === "air"
+          ? getAirAltitude(progress, peakAltitude)
+          : index === 0 || index === steps
+            ? 0
+            : 0.0012,
     });
   }
 

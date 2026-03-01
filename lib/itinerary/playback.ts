@@ -1,22 +1,51 @@
-import type { ItineraryLeg, PlaybackSpeed, PlaybackState } from "../data/types";
+import type { ItineraryLeg, PlaybackState } from "../data/types";
+import {
+  buildTimelineSegments,
+  getTimelineFrameFromTripProgress,
+  getTripProgressForLegEnd,
+  getTripProgressForLegStart,
+} from "./timeline";
 
-const AIR_DURATION_MS = 2200;
-const GROUND_DURATION_MS = 3200;
-const LEG_DWELL_MS = 700;
+function createPlaybackFrame(
+  tripProgress: number,
+  legs: ItineraryLeg[],
+  speed: PlaybackState["speed"],
+  status: PlaybackState["status"]
+): PlaybackState {
+  const frame = getTimelineFrameFromTripProgress(
+    buildTimelineSegments(legs),
+    tripProgress,
+    speed
+  );
 
-export function getPlaybackLegDurationMs(leg: ItineraryLeg, speed: PlaybackSpeed) {
-  const baseDuration = leg.mode === "air" ? AIR_DURATION_MS : GROUND_DURATION_MS;
-  return baseDuration / speed;
+  return {
+    status,
+    speed,
+    tripProgress: frame.tripProgress,
+    activeLegIndex: frame.activeLegIndex,
+    activeLegProgress: frame.activeLegProgress,
+    phase: frame.phase,
+  };
 }
 
 export function createInitialPlaybackState(): PlaybackState {
   return {
     status: "idle",
-    activeLegIndex: 0,
-    progress: 0,
     speed: 1,
-    dwellRemainingMs: 0,
+    tripProgress: 0,
+    activeLegIndex: 0,
+    activeLegProgress: 0,
+    phase: "travel",
   };
+}
+
+export function syncPlaybackState(
+  playback: PlaybackState,
+  legs: ItineraryLeg[],
+  tripProgress = playback.tripProgress,
+  status = playback.status
+) {
+  return createPlaybackFrame(tripProgress, legs, playback.speed, status);
 }
 
 export function advancePlaybackState(
@@ -28,54 +57,61 @@ export function advancePlaybackState(
     return playback;
   }
 
-  const activeLeg = legs[playback.activeLegIndex];
-  if (!activeLeg) {
+  const segments = buildTimelineSegments(legs);
+  const totalDurationMs = segments.reduce(
+    (sum, segment) => sum + segment.durationMs / playback.speed,
+    0
+  );
+
+  if (totalDurationMs === 0) {
     return {
       ...playback,
       status: "paused",
-      progress: 1,
-      dwellRemainingMs: 0,
     };
   }
 
-  if (playback.dwellRemainingMs > 0) {
-    const remaining = playback.dwellRemainingMs - deltaMs;
-    if (remaining > 0) {
-      return {
-        ...playback,
-        dwellRemainingMs: remaining,
-      };
-    }
+  const nextTripProgress = Math.min(
+    1,
+    playback.tripProgress + deltaMs / totalDurationMs
+  );
+  const nextPlayback = syncPlaybackState(
+    playback,
+    legs,
+    nextTripProgress,
+    nextTripProgress >= 1 ? "paused" : "playing"
+  );
 
-    return {
-      ...playback,
-      dwellRemainingMs: 0,
-    };
-  }
+  return nextPlayback;
+}
 
-  const durationMs = getPlaybackLegDurationMs(activeLeg, playback.speed);
-  const nextProgress = playback.progress + deltaMs / durationMs;
+export function jumpPlaybackToLegStart(
+  playback: PlaybackState,
+  legs: ItineraryLeg[],
+  legIndex: number,
+  status: PlaybackState["status"] = "paused"
+) {
+  const boundedLegIndex = Math.max(0, Math.min(legIndex, Math.max(legs.length - 1, 0)));
+  const tripProgress = getTripProgressForLegStart(
+    buildTimelineSegments(legs),
+    boundedLegIndex,
+    playback.speed
+  );
 
-  if (nextProgress < 1) {
-    return {
-      ...playback,
-      progress: nextProgress,
-    };
-  }
+  return syncPlaybackState(playback, legs, tripProgress, status);
+}
 
-  if (playback.activeLegIndex >= legs.length - 1) {
-    return {
-      ...playback,
-      status: "paused",
-      progress: 1,
-      dwellRemainingMs: 0,
-    };
-  }
+export function jumpPlaybackToLegEnd(
+  playback: PlaybackState,
+  legs: ItineraryLeg[],
+  legIndex: number,
+  status: PlaybackState["status"] = "paused"
+) {
+  const boundedLegIndex = Math.max(0, Math.min(legIndex, Math.max(legs.length - 1, 0)));
+  const tripProgress = getTripProgressForLegEnd(
+    buildTimelineSegments(legs),
+    boundedLegIndex,
+    playback.speed
+  );
 
-  return {
-    ...playback,
-    activeLegIndex: playback.activeLegIndex + 1,
-    progress: 0,
-    dwellRemainingMs: LEG_DWELL_MS,
-  };
+  return syncPlaybackState(playback, legs, tripProgress, status);
 }

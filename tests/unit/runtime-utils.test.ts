@@ -4,9 +4,11 @@ import { formatCoordinates, formatDistance, formatDuration } from "../../lib/dat
 import { loadDataset } from "../../lib/data/loadDataset";
 import {
   getAirportPointOfView,
+  getBufferedLegPointOfView,
   getFlyDurationMs,
   getLegPointOfView,
   getOverviewPointOfView,
+  getStopContextPointOfView,
 } from "../../lib/globe/camera";
 import { globeColors } from "../../lib/globe/colors";
 import { getRouteAltitude, getRouteStroke } from "../../lib/globe/routeGeometry";
@@ -44,6 +46,21 @@ describe("runtime config and utility modules", () => {
     expect(transatlanticLegPointOfView.lat).toBeCloseTo(45.2214);
     expect(transatlanticLegPointOfView.lng).toBeCloseTo(-65.9303);
     expect(transatlanticLegPointOfView.altitude).toBe(2.35);
+    const bufferedLegPointOfView = getBufferedLegPointOfView(
+      { lat: 49.1947, lon: -123.1792 },
+      { lat: 41.2481, lon: -8.6814 }
+    );
+    expect(bufferedLegPointOfView.lat).toBeCloseTo(transatlanticLegPointOfView.lat);
+    expect(bufferedLegPointOfView.lng).toBeCloseTo(transatlanticLegPointOfView.lng);
+    expect(bufferedLegPointOfView.altitude).toBe(2.71);
+
+    const stopContextPointOfView = getStopContextPointOfView(
+      { lat: 49.1947, lon: -123.1792 },
+      [{ lat: 41.2481, lon: -8.6814 }]
+    );
+    expect(stopContextPointOfView.lat).toBeCloseTo(46.5458, 3);
+    expect(stopContextPointOfView.lng).toBeCloseTo(-93.3236, 3);
+    expect(stopContextPointOfView.altitude).toBe(2.9);
     expect(
       getLegPointOfView(
         { lat: null, lon: null },
@@ -57,7 +74,7 @@ describe("runtime config and utility modules", () => {
         { kind: "stop" as const, stopId: "b", lat: 30, lon: 40 },
       ])
     ).toEqual({ lat: 20, lng: 30, altitude: 1.6 });
-    expect(globeColors.airLegSelected).toBe("rgba(108, 228, 255, 0.9)");
+    expect(globeColors.airLegSelected).toBe("rgba(142, 251, 255, 0.96)");
     expect(getRouteAltitude(100)).toBeCloseTo(0.04);
     expect(getRouteAltitude(30000)).toBeCloseTo(0.2);
     expect(getRouteStroke(1000, false)).toBeCloseTo(0.14);
@@ -229,7 +246,7 @@ describe("runtime config and utility modules", () => {
           ...initialAppState.playback,
           status: "playing",
           activeLegIndex: 0,
-          progress: 0.6,
+          tripProgress: 0.6,
         },
       },
       { type: "itinerary/remove-stop", stopId: "seed-stop-0" }
@@ -242,7 +259,7 @@ describe("runtime config and utility modules", () => {
         playback: {
           ...initialAppState.playback,
           activeLegIndex: 2,
-          progress: 0.4,
+          tripProgress: 0.4,
           status: "paused",
         },
       },
@@ -255,15 +272,15 @@ describe("runtime config and utility modules", () => {
     });
 
     expect(pausedFromPlaying.playback.status).toBe("paused");
-    expect(playingLegSelection.playback.status).toBe("playing");
+    expect(playingLegSelection.playback.status).toBe("paused");
     expect(appendedStop.itinerary.stops.at(-1)?.label).toBe("Madrid");
     expect(appendedStop.itinerary.selectedInsertIndex).toBe(stops.length);
     expect(removedToEmpty.itinerary.legs).toHaveLength(0);
-    expect(removedToEmpty.playback.progress).toBe(0);
+    expect(removedToEmpty.playback.tripProgress).toBe(0);
     expect(removedToEmpty.playback.status).toBe("idle");
     expect(playWithoutLegIndex.playback.activeLegIndex).toBe(2);
-    expect(playWithoutLegIndex.playback.progress).toBe(0.4);
-    expect(scrubFromIdle.playback.progress).toBe(1);
+    expect(playWithoutLegIndex.playback.tripProgress).toBe(0.4);
+    expect(scrubFromIdle.playback.tripProgress).toBe(1);
     expect(scrubFromIdle.playback.status).toBe("paused");
   });
 });

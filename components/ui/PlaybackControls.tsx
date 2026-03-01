@@ -1,5 +1,5 @@
 import type { PlaybackSpeed, PlaybackState } from "../../lib/data/types";
-import { getPlaybackProgressPercent } from "../../lib/state/selectors";
+import { getTripProgressPercent } from "../../lib/state/selectors";
 import styles from "./ItineraryPanel.module.css";
 
 type PlaybackControlsProps = {
@@ -66,7 +66,7 @@ export function PlaybackControls({
         </select>
       </div>
       <label className={styles.label} htmlFor="playback-progress">
-        Progress: {getPlaybackProgressPercent(playback)}%
+        Progress: {getTripProgressPercent(playback)}%
       </label>
       <input
         id="playback-progress"
@@ -74,7 +74,7 @@ export function PlaybackControls({
         type="range"
         min="0"
         max="100"
-        value={getPlaybackProgressPercent(playback)}
+        value={getTripProgressPercent(playback)}
         onChange={(event) => onProgressChange(Number(event.target.value) / 100)}
       />
     </section>

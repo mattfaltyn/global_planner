@@ -9,11 +9,13 @@ import { GlobeLegend } from "../../components/globe/GlobeLegend";
 import { TestGlobeCanvas } from "../../components/globe/TestGlobeCanvas";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { ErrorState } from "../../components/ui/ErrorState";
+import { ItineraryDock } from "../../components/ui/ItineraryDock";
 import { ItineraryPanel } from "../../components/ui/ItineraryPanel";
 import { LoadingOverlay } from "../../components/ui/LoadingOverlay";
 import { SearchBox } from "../../components/ui/SearchBox";
 import { SearchResults } from "../../components/ui/SearchResults";
 import { Tooltip } from "../../components/ui/Tooltip";
+import { TripPlaybackBar } from "../../components/ui/TripPlaybackBar";
 import { createResolvedFixtureItinerary, fixtureAirports } from "../fixtures/dataset";
 
 vi.mock("next/font/local", () => ({
@@ -23,6 +25,25 @@ vi.mock("next/font/local", () => ({
 vi.mock("../../components/globe/GlobeShell", () => ({
   GlobeShell: () => <div data-testid="globe-shell-page-mock" />,
 }));
+
+function createPlayback(overrides?: Partial<{
+  status: "idle" | "playing" | "paused";
+  speed: 0.5 | 1 | 2 | 4;
+  tripProgress: number;
+  activeLegIndex: number;
+  activeLegProgress: number;
+  phase: "travel" | "dwell";
+}>) {
+  return {
+    status: "idle" as const,
+    speed: 1 as const,
+    tripProgress: 0,
+    activeLegIndex: 0,
+    activeLegProgress: 0,
+    phase: "travel" as const,
+    ...overrides,
+  };
+}
 
 describe("app shells and UI components", () => {
   beforeEach(() => {
@@ -43,7 +64,7 @@ describe("app shells and UI components", () => {
     expect(screen.getByTestId("globe-shell-page-mock")).toBeInTheDocument();
   });
 
-  it("renders static globe and itinerary helper components", async () => {
+  it("renders static globe and helper components", async () => {
     const user = userEvent.setup();
     const { stops, legs } = createResolvedFixtureItinerary();
     const onRetry = vi.fn();
@@ -58,7 +79,7 @@ describe("app shells and UI components", () => {
           stops={stops}
           legs={legs}
           selection={null}
-          playback={{ status: "idle", activeLegIndex: 0, progress: 0 }}
+          playback={createPlayback()}
           onSelectStop={onSelectStop}
           onSelectLeg={onSelectLeg}
           onClearSelection={onClearSelection}
@@ -94,7 +115,11 @@ describe("app shells and UI components", () => {
         stops={stops}
         legs={legs}
         selection={{ kind: "leg", legId: legs[0].id }}
-        playback={{ status: "paused", activeLegIndex: 0, progress: 0.25 }}
+        playback={createPlayback({
+          status: "paused",
+          tripProgress: 0.25,
+          activeLegProgress: 0.25,
+        })}
         onSelectStop={() => undefined}
         onSelectLeg={() => undefined}
         onClearSelection={() => undefined}
@@ -106,10 +131,9 @@ describe("app shells and UI components", () => {
     );
   });
 
-  it("renders and interacts with the itinerary panel", async () => {
+  it("renders and interacts with the itinerary edit panel", async () => {
     const user = userEvent.setup();
     const { stops, legs } = createResolvedFixtureItinerary();
-    const onClose = vi.fn();
     const onSelectStop = vi.fn();
     const onMoveStopUp = vi.fn();
     const onMoveStopDown = vi.fn();
@@ -118,29 +142,13 @@ describe("app shells and UI components", () => {
     const onUpdateStop = vi.fn();
     const onReplaceAnchor = vi.fn();
     const onSetLegMode = vi.fn();
-    const onPlay = vi.fn();
-    const onPause = vi.fn();
-    const onReset = vi.fn();
-    const onStepPrev = vi.fn();
-    const onStepNext = vi.fn();
-    const onSpeedChange = vi.fn();
-    const onProgressChange = vi.fn();
     const onPlayLeg = vi.fn();
 
-    render(
+    const { rerender } = render(
       <ItineraryPanel
         stops={stops}
         legs={legs}
-        selection={{ kind: "leg", legId: legs[4].id }}
-        playback={{
-          status: "playing",
-          activeLegIndex: 4,
-          progress: 0.5,
-          speed: 1,
-          dwellRemainingMs: 0,
-        }}
-        isTouchDevice
-        onClose={onClose}
+        selection={{ kind: "stop", stopId: stops[1].id }}
         onSelectStop={onSelectStop}
         onMoveStopUp={onMoveStopUp}
         onMoveStopDown={onMoveStopDown}
@@ -149,55 +157,145 @@ describe("app shells and UI components", () => {
         onUpdateStop={onUpdateStop}
         onReplaceAnchor={onReplaceAnchor}
         onSetLegMode={onSetLegMode}
-        onPlay={onPlay}
-        onPause={onPause}
-        onReset={onReset}
-        onStepPrev={onStepPrev}
-        onStepNext={onStepNext}
-        onSpeedChange={onSpeedChange}
-        onProgressChange={onProgressChange}
         onPlayLeg={onPlayLeg}
       />
     );
 
-    await user.click(screen.getByRole("button", { name: "Close" }));
-    await user.click(screen.getByRole("button", { name: "Pause" }));
-    await user.click(screen.getByRole("button", { name: "Reset" }));
-    await user.click(screen.getByRole("button", { name: "Previous" }));
-    await user.click(screen.getByRole("button", { name: "Next" }));
-    await user.selectOptions(screen.getByLabelText("Playback speed"), "2");
-    fireEvent.change(screen.getByLabelText(/Progress:/), { target: { value: "25" } });
     await user.click(screen.getByRole("button", { name: /1. Vancouver/i }));
     await user.click(screen.getAllByRole("button", { name: "Up" })[0]);
     await user.click(screen.getAllByRole("button", { name: "Down" })[0]);
     await user.click(screen.getAllByRole("button", { name: "Remove" })[0]);
     await user.click(screen.getAllByRole("button", { name: "Insert after" })[0]);
-    await user.click(screen.getByRole("button", { name: "Air" }));
-    await user.click(screen.getByRole("button", { name: "Ground" }));
-    await user.click(screen.getByRole("button", { name: "Play this leg" }));
+    fireEvent.change(screen.getByLabelText("Label"), { target: { value: "Porto Base" } });
+    fireEvent.change(screen.getByLabelText("Arrival date"), {
+      target: { value: "2026-02-22" },
+    });
+    fireEvent.change(screen.getByLabelText("Departure date"), {
+      target: { value: "2026-03-03" },
+    });
+    fireEvent.change(screen.getByLabelText("Notes"), {
+      target: { value: "Walkable city" },
+    });
+    await user.click(screen.getByRole("button", { name: "Replace anchor with search" }));
 
-    expect(screen.getByTestId("itinerary-panel").className).toMatch(/mobilePanel/);
-    expect(screen.getByText("Summary")).toBeInTheDocument();
-    expect(screen.getByText(/Feb 20, 2026 to Apr 10, 2026/)).toBeInTheDocument();
-    expect(screen.getByText(/Active leg: Lisbon to Barcelona/)).toBeInTheDocument();
-    expect(onClose).toHaveBeenCalled();
-    expect(onPause).toHaveBeenCalled();
-    expect(onReset).toHaveBeenCalled();
-    expect(onStepPrev).toHaveBeenCalled();
-    expect(onStepNext).toHaveBeenCalled();
-    expect(onSpeedChange).toHaveBeenCalledWith(2);
-    expect(onProgressChange).toHaveBeenCalledWith(0.25);
+    expect(screen.getByText("Stop editor")).toBeInTheDocument();
+    expect(screen.getByText("Stay")).toBeInTheDocument();
     expect(onSelectStop).toHaveBeenCalledWith("seed-stop-0");
     expect(onMoveStopUp).toHaveBeenCalledWith("seed-stop-0");
     expect(onMoveStopDown).toHaveBeenCalledWith("seed-stop-0");
     expect(onRemoveStop).toHaveBeenCalledWith("seed-stop-0");
     expect(onInsertAfter).toHaveBeenCalledWith(0, "seed-stop-0");
+    expect(onUpdateStop).toHaveBeenNthCalledWith(1, stops[1].id, { label: "Porto Base" });
+    expect(onUpdateStop).toHaveBeenNthCalledWith(2, stops[1].id, {
+      arrivalDate: "2026-02-22",
+    });
+    expect(onUpdateStop).toHaveBeenNthCalledWith(3, stops[1].id, {
+      departureDate: "2026-03-03",
+    });
+    expect(onUpdateStop).toHaveBeenNthCalledWith(4, stops[1].id, {
+      notes: "Walkable city",
+    });
+    expect(onReplaceAnchor).toHaveBeenCalledWith(stops[1].id);
+
+    rerender(
+      <ItineraryPanel
+        stops={stops}
+        legs={legs}
+        selection={{ kind: "leg", legId: legs[4].id }}
+        onSelectStop={onSelectStop}
+        onMoveStopUp={onMoveStopUp}
+        onMoveStopDown={onMoveStopDown}
+        onRemoveStop={onRemoveStop}
+        onInsertAfter={onInsertAfter}
+        onUpdateStop={onUpdateStop}
+        onReplaceAnchor={onReplaceAnchor}
+        onSetLegMode={onSetLegMode}
+        onPlayLeg={onPlayLeg}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Air" }));
+    await user.click(screen.getByRole("button", { name: "Ground" }));
+    await user.click(screen.getByRole("button", { name: "Play this leg" }));
+
     expect(onSetLegMode).toHaveBeenNthCalledWith(1, legs[4].id, "air");
     expect(onSetLegMode).toHaveBeenNthCalledWith(2, legs[4].id, "ground");
     expect(onPlayLeg).toHaveBeenCalledWith(legs[4].id);
   });
 
-  it("renders the stop editor and playback idle state", async () => {
+  it("renders the playback dock and supports mode switching and collapsing", async () => {
+    const user = userEvent.setup();
+    const { stops, legs } = createResolvedFixtureItinerary();
+    const onSetMode = vi.fn();
+    const onToggleCollapsed = vi.fn();
+
+    const { rerender } = render(
+      <ItineraryDock
+        stops={stops}
+        legs={legs}
+        selection={{ kind: "leg", legId: legs[4].id }}
+        playback={createPlayback({
+          status: "paused",
+          tripProgress: 0.5,
+          activeLegIndex: 4,
+        })}
+        mode="playback"
+        collapsed={false}
+        isTouchDevice={false}
+        onSetMode={onSetMode}
+        onToggleCollapsed={onToggleCollapsed}
+        onSelectStop={() => undefined}
+        onMoveStopUp={() => undefined}
+        onMoveStopDown={() => undefined}
+        onRemoveStop={() => undefined}
+        onInsertAfter={() => undefined}
+        onUpdateStop={() => undefined}
+        onReplaceAnchor={() => undefined}
+        onSetLegMode={() => undefined}
+        onPlayLeg={() => undefined}
+      />
+    );
+
+    expect(screen.getByText("Travel itinerary")).toBeInTheDocument();
+    expect(screen.getByText("Current route")).toBeInTheDocument();
+    expect(screen.getByText("Lisbon to Barcelona")).toBeInTheDocument();
+    expect(screen.getByText("Feb 20, 2026 to Apr 10, 2026")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    expect(onSetMode).toHaveBeenCalledWith("edit");
+    await user.click(screen.getByRole("button", { name: "Collapse" }));
+    expect(onToggleCollapsed).toHaveBeenCalled();
+
+    rerender(
+      <ItineraryDock
+        stops={stops}
+        legs={legs}
+        selection={null}
+        playback={createPlayback({
+          status: "paused",
+          tripProgress: 0.5,
+          activeLegIndex: 4,
+        })}
+        mode="playback"
+        collapsed
+        isTouchDevice={false}
+        onSetMode={onSetMode}
+        onToggleCollapsed={onToggleCollapsed}
+        onSelectStop={() => undefined}
+        onMoveStopUp={() => undefined}
+        onMoveStopDown={() => undefined}
+        onRemoveStop={() => undefined}
+        onInsertAfter={() => undefined}
+        onUpdateStop={() => undefined}
+        onReplaceAnchor={() => undefined}
+        onSetLegMode={() => undefined}
+        onPlayLeg={() => undefined}
+      />
+    );
+
+    expect(screen.getByRole("button", { name: "Expand" })).toBeInTheDocument();
+  });
+
+  it("renders the trip playback bar and unresolved stop editor state", async () => {
     const user = userEvent.setup();
     const { stops, legs } = createResolvedFixtureItinerary();
     const unresolvedStop = {
@@ -208,41 +306,52 @@ describe("app shells and UI components", () => {
     const onUpdateStop = vi.fn();
     const onReplaceAnchor = vi.fn();
     const onPlay = vi.fn();
+    const onReset = vi.fn();
+    const onStepPrev = vi.fn();
+    const onStepNext = vi.fn();
+    const onSpeedChange = vi.fn();
+    const onProgressChange = vi.fn();
+    const onOpenEdit = vi.fn();
 
     render(
-      <ItineraryPanel
-        stops={[stops[0], unresolvedStop]}
-        legs={legs.slice(0, 1)}
-        selection={{ kind: "stop", stopId: unresolvedStop.id }}
-        playback={{
-          status: "idle",
-          activeLegIndex: 0,
-          progress: 0,
-          speed: 1,
-          dwellRemainingMs: 0,
-        }}
-        isTouchDevice={false}
-        onClose={() => undefined}
-        onSelectStop={() => undefined}
-        onMoveStopUp={() => undefined}
-        onMoveStopDown={() => undefined}
-        onRemoveStop={() => undefined}
-        onInsertAfter={() => undefined}
-        onUpdateStop={onUpdateStop}
-        onReplaceAnchor={onReplaceAnchor}
-        onSetLegMode={() => undefined}
-        onPlay={onPlay}
-        onPause={() => undefined}
-        onReset={() => undefined}
-        onStepPrev={() => undefined}
-        onStepNext={() => undefined}
-        onSpeedChange={() => undefined}
-        onProgressChange={() => undefined}
-        onPlayLeg={() => undefined}
-      />
+      <>
+        <TripPlaybackBar
+          stops={stops}
+          legs={legs}
+          playback={createPlayback()}
+          onPlay={onPlay}
+          onPause={() => undefined}
+          onReset={onReset}
+          onStepPrev={onStepPrev}
+          onStepNext={onStepNext}
+          onSpeedChange={onSpeedChange}
+          onProgressChange={onProgressChange}
+          onOpenEdit={onOpenEdit}
+        />
+        <ItineraryPanel
+          stops={[stops[0], unresolvedStop]}
+          legs={legs.slice(0, 1)}
+          selection={{ kind: "stop", stopId: unresolvedStop.id }}
+          onSelectStop={() => undefined}
+          onMoveStopUp={() => undefined}
+          onMoveStopDown={() => undefined}
+          onRemoveStop={() => undefined}
+          onInsertAfter={() => undefined}
+          onUpdateStop={onUpdateStop}
+          onReplaceAnchor={onReplaceAnchor}
+          onSetLegMode={() => undefined}
+          onPlayLeg={() => undefined}
+        />
+      </>
     );
 
     await user.click(screen.getByRole("button", { name: "Play" }));
+    await user.click(screen.getByRole("button", { name: "Reset" }));
+    await user.click(screen.getByRole("button", { name: "Previous" }));
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    await user.selectOptions(screen.getByLabelText("Playback speed"), "2");
+    fireEvent.change(screen.getByLabelText(/Trip progress:/), { target: { value: "25" } });
+    await user.click(screen.getByRole("button", { name: "Edit trip" }));
     fireEvent.change(screen.getByLabelText("Label"), { target: { value: "Porto Base" } });
     fireEvent.change(screen.getByLabelText("Arrival date"), {
       target: { value: "2026-02-22" },
@@ -261,9 +370,17 @@ describe("app shells and UI components", () => {
     });
     await user.click(screen.getByRole("button", { name: "Replace anchor with search" }));
 
+    expect(screen.getByText("Trip playback")).toBeInTheDocument();
+    expect(screen.getByText("Vancouver to Porto")).toBeInTheDocument();
     expect(screen.getByText("This stop is unresolved. Use search to replace its anchor airport.")).toBeInTheDocument();
     expect(screen.getByText("Unresolved")).toBeInTheDocument();
     expect(onPlay).toHaveBeenCalled();
+    expect(onReset).toHaveBeenCalled();
+    expect(onStepPrev).toHaveBeenCalled();
+    expect(onStepNext).toHaveBeenCalled();
+    expect(onSpeedChange).toHaveBeenCalledWith(2);
+    expect(onProgressChange).toHaveBeenCalledWith(0.25);
+    expect(onOpenEdit).toHaveBeenCalled();
     expect(onUpdateStop).toHaveBeenNthCalledWith(1, unresolvedStop.id, { label: "Porto Base" });
     expect(onUpdateStop).toHaveBeenNthCalledWith(2, unresolvedStop.id, {
       arrivalDate: "2026-02-22",
@@ -294,40 +411,50 @@ describe("app shells and UI components", () => {
     };
 
     render(
-      <ItineraryPanel
-        stops={[]}
-        legs={[missingLeg]}
-        selection={{ kind: "leg", legId: missingLeg.id }}
-        playback={{
-          status: "paused",
-          activeLegIndex: 0,
-          progress: 0.5,
-          speed: 1,
-          dwellRemainingMs: 0,
-        }}
-        isTouchDevice={false}
-        onClose={() => undefined}
-        onSelectStop={() => undefined}
-        onMoveStopUp={() => undefined}
-        onMoveStopDown={() => undefined}
-        onRemoveStop={() => undefined}
-        onInsertAfter={() => undefined}
-        onUpdateStop={() => undefined}
-        onReplaceAnchor={() => undefined}
-        onSetLegMode={() => undefined}
-        onPlay={() => undefined}
-        onPause={() => undefined}
-        onReset={() => undefined}
-        onStepPrev={() => undefined}
-        onStepNext={() => undefined}
-        onSpeedChange={() => undefined}
-        onProgressChange={() => undefined}
-        onPlayLeg={() => undefined}
-      />
+      <>
+        <ItineraryDock
+          stops={[]}
+          legs={[missingLeg]}
+          selection={{ kind: "leg", legId: missingLeg.id }}
+          playback={createPlayback({
+            status: "paused",
+            tripProgress: 0.5,
+            activeLegIndex: 0,
+            activeLegProgress: 0.5,
+          })}
+          mode="playback"
+          collapsed={false}
+          isTouchDevice={false}
+          onSetMode={() => undefined}
+          onToggleCollapsed={() => undefined}
+          onSelectStop={() => undefined}
+          onMoveStopUp={() => undefined}
+          onMoveStopDown={() => undefined}
+          onRemoveStop={() => undefined}
+          onInsertAfter={() => undefined}
+          onUpdateStop={() => undefined}
+          onReplaceAnchor={() => undefined}
+          onSetLegMode={() => undefined}
+          onPlayLeg={() => undefined}
+        />
+        <ItineraryPanel
+          stops={[]}
+          legs={[missingLeg]}
+          selection={{ kind: "leg", legId: missingLeg.id }}
+          onSelectStop={() => undefined}
+          onMoveStopUp={() => undefined}
+          onMoveStopDown={() => undefined}
+          onRemoveStop={() => undefined}
+          onInsertAfter={() => undefined}
+          onUpdateStop={() => undefined}
+          onReplaceAnchor={() => undefined}
+          onSetLegMode={() => undefined}
+          onPlayLeg={() => undefined}
+        />
+      </>
     );
 
     expect(screen.getByText("Dates unavailable")).toBeInTheDocument();
-    expect(screen.getByText(/Active leg: missing-from to missing-to/)).toBeInTheDocument();
     expect(screen.getAllByText(/missing-from to missing-to/)).toHaveLength(2);
     expect(screen.getByText("Unknown distance")).toBeInTheDocument();
   });

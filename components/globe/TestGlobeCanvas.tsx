@@ -7,8 +7,11 @@ type TestGlobeCanvasProps = {
   selection: ItinerarySelection;
   playback: {
     status: "idle" | "playing" | "paused";
+    speed: 0.5 | 1 | 2 | 4;
+    tripProgress: number;
     activeLegIndex: number;
-    progress: number;
+    activeLegProgress: number;
+    phase: "travel" | "dwell";
   };
   onSelectStop: (stopId: string) => void;
   onSelectLeg: (legId: string) => void;
@@ -40,7 +43,8 @@ export function TestGlobeCanvas({
         }}
       >
         <p data-testid="test-globe-summary">
-          {stops.length} stops · {legs.length} legs · {playback.status}
+          {stops.length} stops · {legs.length} legs · {playback.status} ·{" "}
+          {Math.round(playback.tripProgress * 100)}%
         </p>
         <p data-testid="test-globe-selection">
           {selection ? JSON.stringify(selection) : "no-selection"}

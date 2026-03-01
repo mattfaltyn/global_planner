@@ -1,6 +1,6 @@
 .wrap {
   position: relative;
-  width: min(460px, calc(100vw - 48px));
+  width: min(320px, calc(100vw - 48px));
 }
 
 .label {

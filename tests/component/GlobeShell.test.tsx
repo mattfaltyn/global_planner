@@ -61,18 +61,23 @@ describe("GlobeShell", () => {
   });
 
   it("shows the loading state and then renders the seeded itinerary", async () => {
+    const user = userEvent.setup();
     render(<GlobeShell />);
 
-    expect(screen.getByTestId("loading-overlay")).toBeInTheDocument();
     await waitFor(() => {
       expect(screen.getByTestId("dataset-status")).toHaveTextContent("Loaded 9 airports and 7 routes");
     });
     await waitFor(() => {
-      expect(screen.getByText(/9 total/)).toBeInTheDocument();
+      expect(screen.getByTestId("itinerary-dock")).toHaveTextContent("Vancouver to Porto");
     });
 
     expect(screen.getByTestId("globe-canvas-mock")).toBeInTheDocument();
-    expect(screen.getByTestId("itinerary-panel")).toHaveTextContent("Travel itinerary");
+    expect(screen.getByTestId("itinerary-dock")).toHaveTextContent("Travel itinerary");
+    expect(screen.getByTestId("trip-playback-bar")).toHaveTextContent("Trip not started");
+    expect(screen.getByTestId("timeline-state")).toHaveTextContent("15 timeline segments");
+
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    expect(screen.getByTestId("itinerary-panel")).toHaveTextContent("9 total");
     expect(screen.getAllByText("Lisbon, Portugal")).toHaveLength(2);
   });
 
@@ -101,9 +106,12 @@ describe("GlobeShell", () => {
 
     await waitForElementToBeRemoved(() => screen.getByTestId("loading-overlay"));
     await waitFor(() => {
-      expect(screen.getByDisplayValue("Porto")).toBeInTheDocument();
+      expect(screen.getByText("Stop seed-stop-1")).toBeInTheDocument();
       expect(window.location.search).toBe("?stop=seed-stop-1");
     });
+
+    await userEvent.setup().click(screen.getByRole("button", { name: "Edit" }));
+    expect(screen.getByDisplayValue("Porto")).toBeInTheDocument();
 
     view.unmount();
     window.history.replaceState({}, "", "/?leg=seed-stop-4__seed-stop-5");
@@ -111,19 +119,24 @@ describe("GlobeShell", () => {
 
     await waitForElementToBeRemoved(() => screen.getByTestId("loading-overlay"));
     await waitFor(() => {
-      expect(screen.getByText("Leg editor")).toBeInTheDocument();
-      expect(screen.getByText(/Lisbon to Barcelona/i)).toBeInTheDocument();
+      expect(screen.getByText("Leg seed-stop-4__seed-stop-5")).toBeInTheDocument();
       expect(window.location.search).toBe("?leg=seed-stop-4__seed-stop-5");
     });
+
+    await userEvent.setup().click(screen.getByRole("button", { name: "Edit" }));
+    expect(screen.getByText("Leg editor")).toBeInTheDocument();
+    expect(screen.getByText(/Lisbon to Barcelona/i)).toBeInTheDocument();
   });
 
   it("reacts to browser navigation after hydration", async () => {
+    const user = userEvent.setup();
     render(<GlobeShell />);
 
     await waitForElementToBeRemoved(() => screen.getByTestId("loading-overlay"));
-    await userEvent.setup().click(screen.getByRole("button", { name: "select-stop" }));
+    await user.click(screen.getByRole("button", { name: "select-stop" }));
     await waitFor(() => {
       expect(window.location.search).toBe("?stop=seed-stop-1");
+      expect(screen.getByDisplayValue("Porto")).toBeInTheDocument();
     });
 
     await act(async () => {
@@ -136,34 +149,7 @@ describe("GlobeShell", () => {
     });
   });
 
-  it("updates selection from playback side effects and final-leg completion", async () => {
-    process.env.NEXT_PUBLIC_E2E = "1";
-    const user = userEvent.setup();
-    render(<GlobeShell />);
-
-    await waitForElementToBeRemoved(() => screen.getByTestId("loading-overlay"));
-    await waitFor(() => {
-      expect(window.__GLOBAL_PLANNER_TEST_API__).toBeDefined();
-    });
-
-    await user.click(screen.getByRole("button", { name: "Play" }));
-    await waitFor(() => {
-      expect(screen.getByText("Leg editor")).toBeInTheDocument();
-      expect(window.location.search).toBe("?leg=seed-stop-0__seed-stop-1");
-    });
-
-    await act(async () => {
-      window.__GLOBAL_PLANNER_TEST_API__?.selectLeg("seed-stop-7__seed-stop-8");
-    });
-    fireEvent.change(screen.getByLabelText(/Progress:/), { target: { value: "100" } });
-
-    await waitFor(() => {
-      expect(screen.getByDisplayValue("Madrid")).toBeInTheDocument();
-      expect(window.location.search).toBe("?stop=seed-stop-8");
-    });
-  });
-
-  it("handles hover, selection, close, and playback interactions", async () => {
+  it("handles hover, selection, playback controls, and anchor replacement", async () => {
     const user = userEvent.setup();
     render(<GlobeShell />);
 
@@ -178,40 +164,36 @@ describe("GlobeShell", () => {
     await user.click(screen.getByRole("button", { name: "clear-hover" }));
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "select-stop" }));
-    expect(screen.getByDisplayValue("Porto")).toBeInTheDocument();
-
     await user.click(screen.getByRole("button", { name: "select-leg" }));
     expect(screen.getByText("Leg editor")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Play" }));
-    await user.click(screen.getByRole("button", { name: "Reset" }));
-    await user.click(screen.getByRole("button", { name: "Previous" }));
-    await user.click(screen.getByRole("button", { name: "Next" }));
-    await user.selectOptions(screen.getByLabelText("Playback speed"), "2");
-    fireEvent.change(screen.getByLabelText(/Progress:/), { target: { value: "20" } });
     await user.click(screen.getByRole("button", { name: "Ground" }));
     expect(screen.getByTestId("selected-leg-mode")).toHaveTextContent("ground");
     await user.click(screen.getByRole("button", { name: "Play this leg" }));
     expect(screen.getByRole("button", { name: "Pause" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Pause" }));
+    await user.click(screen.getByRole("button", { name: "Reset" }));
+    await user.click(screen.getByRole("button", { name: "Previous" }));
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    await user.selectOptions(screen.getByLabelText("Playback speed"), "2");
+    fireEvent.change(screen.getByLabelText(/Trip progress:/), { target: { value: "20" } });
+
     await user.click(screen.getByRole("button", { name: "select-stop" }));
+    expect(screen.getByDisplayValue("Porto")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Replace anchor with search" }));
     expect(screen.getByPlaceholderText("Replace anchor with a city or airport")).toBeInTheDocument();
     await user.type(screen.getByLabelText("Search airports"), "FAO");
     await user.click(screen.getByRole("button", { name: /faro airport/i }));
+    expect(screen.getByDisplayValue("Faro")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /1. Vancouver/i }));
     await user.click(screen.getAllByRole("button", { name: "Up" })[0]);
     await user.click(screen.getAllByRole("button", { name: "Down" })[0]);
     await user.click(screen.getAllByRole("button", { name: "Insert after" })[0]);
     fireEvent.change(screen.getByLabelText("Label"), { target: { value: "Vancouver Hub" } });
     await user.click(screen.getAllByRole("button", { name: "Remove" })[1]);
-    await user.click(screen.getByRole("button", { name: "Close" }));
-
-    expect(screen.getByText("This is your itinerary.")).toBeInTheDocument();
-
     await user.click(screen.getByRole("button", { name: "clear-selection" }));
-    expect(screen.getByText("This is your itinerary.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Playback" }));
+
+    expect(screen.getByText("Nothing selected")).toBeInTheDocument();
   });
 
   it("registers the E2E test API when enabled", async () => {
@@ -224,9 +206,6 @@ describe("GlobeShell", () => {
     await waitFor(() => {
       expect(screen.getByTestId("dataset-status")).toHaveTextContent("Loaded 9 airports and 7 routes");
     });
-    await act(async () => {
-      await Promise.resolve();
-    });
 
     await act(async () => {
       window.__GLOBAL_PLANNER_TEST_API__?.selectLeg("seed-stop-4__seed-stop-5");
@@ -236,13 +215,13 @@ describe("GlobeShell", () => {
     });
 
     await waitFor(() => {
-      expect(window.__GLOBAL_PLANNER_TEST_API__?.getState()).toEqual({
-        selection: "?stop=seed-stop-1",
-        stopCount: 9,
-        legCount: 8,
-        playbackStatus: "paused",
-      });
-      expect(screen.getByDisplayValue("Porto")).toBeInTheDocument();
+      const apiState = window.__GLOBAL_PLANNER_TEST_API__?.getState();
+      expect(apiState?.stopCount).toBe(9);
+      expect(apiState?.legCount).toBe(8);
+      expect(apiState?.playbackStatus).toBe("idle");
+      expect(apiState?.activeLegIndex).toBe(0);
+      expect(apiState?.tripProgress).toBe(0);
+      expect(screen.getByText("Stop seed-stop-1")).toBeInTheDocument();
     });
 
     view.unmount();

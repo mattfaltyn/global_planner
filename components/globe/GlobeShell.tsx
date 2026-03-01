@@ -5,8 +5,8 @@ import {
   startTransition,
   useDeferredValue,
   useEffect,
+  useMemo,
   useReducer,
-  useRef,
 } from "react";
 import { formatDistance } from "../../lib/data/formatters";
 import { loadDataset } from "../../lib/data/loadDataset";
@@ -16,16 +16,17 @@ import { resolveSeededItinerary } from "../../lib/itinerary/resolveStops";
 import { appReducer, initialAppState } from "../../lib/state/appState";
 import {
   getSelectedLeg,
+  getTimelineSegments,
   parseItinerarySelectionFromQuery,
   serializeItinerarySelectionToQuery,
 } from "../../lib/state/selectors";
 import { ErrorState } from "../ui/ErrorState";
-import { ItineraryPanel } from "../ui/ItineraryPanel";
+import { ItineraryDock } from "../ui/ItineraryDock";
 import { LoadingOverlay } from "../ui/LoadingOverlay";
 import { SearchBox } from "../ui/SearchBox";
 import { Tooltip } from "../ui/Tooltip";
+import { TripPlaybackBar } from "../ui/TripPlaybackBar";
 import styles from "./GlobeShell.module.css";
-import { GlobeLegend } from "./GlobeLegend";
 
 const GlobeCanvas = dynamic(
   () =>
@@ -45,6 +46,8 @@ declare global {
         stopCount: number;
         legCount: number;
         playbackStatus: string;
+        tripProgress: number;
+        activeLegIndex: number;
       };
     };
   }
@@ -119,7 +122,6 @@ export function getHoverContent(
 export function GlobeShell() {
   const [state, dispatch] = useReducer(appReducer, initialAppState);
   const deferredSearchQuery = useDeferredValue(state.searchQuery);
-  const previousPlaybackSignatureRef = useRef<string>("");
   const dataset = state.loadState.status === "ready" ? state.loadState.dataset : null;
   const searchResults =
     dataset && deferredSearchQuery.trim().length > 0
@@ -131,21 +133,17 @@ export function GlobeShell() {
     state.itinerary.legs
   );
   const selectedLeg = getSelectedLeg(state.selection, state.itinerary.legs);
-  const selectedLegId =
-    state.selection && state.selection.kind === "leg"
-      ? state.selection.legId
-      : null;
-  const activeLegIndexFromSelection =
-    selectedLegId
-      ? state.itinerary.legs.findIndex((leg) => leg.id === selectedLegId)
-      : -1;
+  const timelineSegments = useMemo(
+    () => getTimelineSegments(state.itinerary.legs),
+    [state.itinerary.legs]
+  );
 
   useEffect(() => {
     dispatch({ type: "dataset/loading" });
 
     loadDataset()
-      .then((dataset) => {
-        dispatch({ type: "dataset/loaded", dataset });
+      .then((nextDataset) => {
+        dispatch({ type: "dataset/loaded", dataset: nextDataset });
       })
       .catch((error: Error) => {
         dispatch({ type: "dataset/error", message: error.message });
@@ -164,10 +162,7 @@ export function GlobeShell() {
   }, []);
 
   useEffect(() => {
-    if (
-      state.loadState.status !== "ready" ||
-      state.itinerary.stops.length > 0
-    ) {
+    if (state.loadState.status !== "ready" || state.itinerary.stops.length > 0) {
       return;
     }
 
@@ -207,8 +202,7 @@ export function GlobeShell() {
     }
 
     const query = serializeItinerarySelectionToQuery(state.selection);
-    const targetUrl = `${window.location.pathname}${query}`;
-    window.history.replaceState({}, "", targetUrl);
+    window.history.replaceState({}, "", `${window.location.pathname}${query}`);
   }, [state.hasHydratedUrl, state.loadState.status, state.selection]);
 
   useEffect(() => {
@@ -260,38 +254,6 @@ export function GlobeShell() {
   }, [state.playback.status]);
 
   useEffect(() => {
-    const activeLeg = state.itinerary.legs[state.playback.activeLegIndex];
-    if (!activeLeg) {
-      return;
-    }
-
-    const signature = [
-      state.playback.status,
-      state.playback.activeLegIndex,
-      Math.round(state.playback.progress * 100),
-    ].join(":");
-
-    if (previousPlaybackSignatureRef.current === signature) {
-      return;
-    }
-
-    previousPlaybackSignatureRef.current = signature;
-
-    if (state.playback.status === "playing" && state.selection?.kind !== "leg") {
-      dispatch({ type: "itinerary/select-leg", legId: activeLeg.id });
-      return;
-    }
-
-    if (
-      state.playback.progress >= 1 &&
-      state.playback.activeLegIndex === state.itinerary.legs.length - 1 &&
-      state.selection?.kind !== "stop"
-    ) {
-      dispatch({ type: "itinerary/select-stop", stopId: activeLeg.toStopId });
-    }
-  }, [state.itinerary.legs, state.playback, state.selection]);
-
-  useEffect(() => {
     if (process.env.NEXT_PUBLIC_E2E !== "1") {
       return;
     }
@@ -316,21 +278,18 @@ export function GlobeShell() {
         stopCount: state.itinerary.stops.length,
         legCount: state.itinerary.legs.length,
         playbackStatus: state.playback.status,
+        tripProgress: state.playback.tripProgress,
+        activeLegIndex: state.playback.activeLegIndex,
       }),
     };
 
     return () => {
       delete window.__GLOBAL_PLANNER_TEST_API__;
     };
-  }, [state.itinerary.legs, state.itinerary.stops, state.playback.status, state.selection]);
+  }, [state.itinerary.legs, state.itinerary.stops, state.playback, state.selection]);
 
   if (state.loadState.status === "error") {
-    return (
-      <ErrorState
-        message={state.loadState.message}
-        onRetry={() => window.location.reload()}
-      />
-    );
+    return <ErrorState message={state.loadState.message} onRetry={() => window.location.reload()} />;
   }
 
   return (
@@ -378,21 +337,17 @@ export function GlobeShell() {
             />
           </div>
 
-          <div className={styles.legendWrap}>
-            <GlobeLegend
-              stops={state.itinerary.stops}
-              legs={state.itinerary.legs}
-            />
-          </div>
-
           <div className={styles.panelWrap}>
-            <ItineraryPanel
+            <ItineraryDock
               stops={state.itinerary.stops}
               legs={state.itinerary.legs}
               selection={state.selection}
               playback={state.playback}
+              mode={state.dockMode}
+              collapsed={state.dockCollapsed}
               isTouchDevice={state.isTouchDevice}
-              onClose={() => dispatch({ type: "selection/clear" })}
+              onSetMode={(mode) => dispatch({ type: "dock/set-mode", mode })}
+              onToggleCollapsed={() => dispatch({ type: "dock/toggle-collapsed" })}
               onSelectStop={(stopId) =>
                 dispatch({ type: "itinerary/select-stop", stopId })
               }
@@ -418,33 +373,29 @@ export function GlobeShell() {
               onSetLegMode={(legId, mode) =>
                 dispatch({ type: "itinerary/set-leg-mode", legId, mode })
               }
-              onPlay={() =>
-                dispatch({
-                  type: "playback/play",
-                  legIndex:
-                    activeLegIndexFromSelection >= 0
-                      ? activeLegIndexFromSelection
-                      : undefined,
-                })
-              }
+              onPlayLeg={(legId) => {
+                dispatch({ type: "dock/set-mode", mode: "playback" });
+                dispatch({ type: "playback/jump-to-leg-start", legId });
+                dispatch({ type: "playback/play" });
+              }}
+            />
+          </div>
+
+          <div className={styles.playbackBarWrap}>
+            <TripPlaybackBar
+              stops={state.itinerary.stops}
+              legs={state.itinerary.legs}
+              playback={state.playback}
+              onPlay={() => dispatch({ type: "playback/play" })}
               onPause={() => dispatch({ type: "playback/pause" })}
               onReset={() => dispatch({ type: "playback/reset" })}
               onStepPrev={() => dispatch({ type: "playback/step-prev" })}
               onStepNext={() => dispatch({ type: "playback/step-next" })}
-              onSpeedChange={(speed) =>
-                dispatch({ type: "playback/set-speed", speed })
-              }
+              onSpeedChange={(speed) => dispatch({ type: "playback/set-speed", speed })}
               onProgressChange={(progress) =>
-                dispatch({ type: "playback/set-progress", progress })
+                dispatch({ type: "playback/set-trip-progress", progress })
               }
-              onPlayLeg={(legId) => {
-                const legIndex = state.itinerary.legs.findIndex((leg) => leg.id === legId);
-                dispatch({ type: "itinerary/select-leg", legId });
-                dispatch({
-                  type: "playback/play",
-                  legIndex,
-                });
-              }}
+              onOpenEdit={() => dispatch({ type: "dock/set-mode", mode: "edit" })}
             />
           </div>
 
@@ -492,6 +443,23 @@ export function GlobeShell() {
               {selectedLeg.mode}
             </p>
           ) : null}
+
+          <p
+            data-testid="timeline-state"
+            style={{
+              position: "absolute",
+              width: 1,
+              height: 1,
+              padding: 0,
+              margin: -1,
+              overflow: "hidden",
+              clip: "rect(0, 0, 0, 0)",
+              whiteSpace: "nowrap",
+              border: 0,
+            }}
+          >
+            {timelineSegments.length} timeline segments
+          </p>
         </>
       ) : null}
 

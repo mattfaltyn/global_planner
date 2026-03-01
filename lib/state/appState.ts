@@ -10,13 +10,23 @@ import type {
   TravelMode,
 } from "../data/types";
 import { deriveLegs } from "../itinerary/deriveLegs";
-import { createInitialPlaybackState, advancePlaybackState } from "../itinerary/playback";
+import {
+  advancePlaybackState,
+  createInitialPlaybackState,
+  jumpPlaybackToLegEnd,
+  jumpPlaybackToLegStart,
+  syncPlaybackState,
+} from "../itinerary/playback";
+import { buildTimelineSegments } from "../itinerary/timeline";
 import { buildStopFromAirport, getDayCount } from "../itinerary/resolveStops";
+import { getTimelineNavigationProgress } from "./selectors";
 
 export type LoadState =
   | { status: "idle" | "loading" }
   | { status: "ready"; dataset: LoadedDataset }
   | { status: "error"; message: string };
+
+export type DockMode = "playback" | "edit";
 
 export type AppState = {
   loadState: LoadState;
@@ -26,6 +36,8 @@ export type AppState = {
   searchQuery: string;
   isTouchDevice: boolean;
   searchIntent: SearchIntent;
+  dockMode: DockMode;
+  dockCollapsed: boolean;
   itinerary: {
     stops: ItineraryStop[];
     legs: ItineraryLeg[];
@@ -44,6 +56,8 @@ export type AppAction =
   | { type: "hover/clear" }
   | { type: "selection/hydrate"; selection: ItinerarySelection }
   | { type: "selection/clear" }
+  | { type: "dock/set-mode"; mode: DockMode }
+  | { type: "dock/toggle-collapsed" }
   | { type: "itinerary/seed"; stops: ItineraryStop[] }
   | { type: "itinerary/select-stop"; stopId: string }
   | { type: "itinerary/select-leg"; legId: string }
@@ -61,7 +75,11 @@ export type AppAction =
   | { type: "playback/pause" }
   | { type: "playback/reset" }
   | { type: "playback/set-speed"; speed: PlaybackSpeed }
+  | { type: "playback/set-trip-progress"; progress: number }
   | { type: "playback/set-progress"; progress: number }
+  | { type: "playback/jump-to-leg-start"; legId: string }
+  | { type: "playback/jump-to-stop"; stopId: string }
+  | { type: "playback/recompute-frame" }
   | { type: "playback/step-next" }
   | { type: "playback/step-prev" }
   | { type: "playback/advance-frame"; deltaMs: number };
@@ -74,6 +92,8 @@ export const initialAppState: AppState = {
   searchQuery: "",
   isTouchDevice: false,
   searchIntent: { kind: "add" },
+  dockMode: "playback",
+  dockCollapsed: false,
   itinerary: {
     stops: [],
     legs: [],
@@ -82,14 +102,6 @@ export const initialAppState: AppState = {
   },
   playback: createInitialPlaybackState(),
 };
-
-function rebuildLegs(stops: ItineraryStop[], existingLegs: ItineraryLeg[]) {
-  return deriveLegs(stops, existingLegs);
-}
-
-function setLegMode(legs: ItineraryLeg[], legId: string, mode: TravelMode) {
-  return legs.map((leg) => (leg.id === legId ? { ...leg, mode } : leg));
-}
 
 function getStopIndex(stops: ItineraryStop[], stopId: string) {
   return stops.findIndex((stop) => stop.id === stopId);
@@ -102,100 +114,113 @@ function normalizeStopsForDates(stops: ItineraryStop[]) {
   }));
 }
 
+function setLegMode(legs: ItineraryLeg[], legId: string, mode: TravelMode) {
+  return legs.map((leg) => (leg.id === legId ? { ...leg, mode } : leg));
+}
+
+function rebuildLegs(stops: ItineraryStop[], existingLegs: ItineraryLeg[]) {
+  return deriveLegs(stops, existingLegs);
+}
+
+function syncPlaybackForLegs(playback: PlaybackState, legs: ItineraryLeg[]) {
+  if (legs.length === 0) {
+    return createInitialPlaybackState();
+  }
+
+  return syncPlaybackState(playback, legs);
+}
+
+function getStopProgress(playback: PlaybackState, legs: ItineraryLeg[], stopId: string) {
+  const destinationLegIndex = legs.findIndex((leg) => leg.toStopId === stopId);
+  if (destinationLegIndex >= 0) {
+    return jumpPlaybackToLegEnd(playback, legs, destinationLegIndex).tripProgress;
+  }
+
+  const originLegIndex = legs.findIndex((leg) => leg.fromStopId === stopId);
+  if (originLegIndex >= 0) {
+    return jumpPlaybackToLegStart(playback, legs, originLegIndex).tripProgress;
+  }
+
+  return 0;
+}
+
 export function appReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
     case "dataset/loading":
-      return {
-        ...state,
-        loadState: { status: "loading" },
-      };
+      return { ...state, loadState: { status: "loading" } };
     case "dataset/loaded":
-      return {
-        ...state,
-        loadState: { status: "ready", dataset: action.dataset },
-      };
+      return { ...state, loadState: { status: "ready", dataset: action.dataset } };
     case "dataset/error":
-      return {
-        ...state,
-        loadState: { status: "error", message: action.message },
-      };
+      return { ...state, loadState: { status: "error", message: action.message } };
     case "hover/stop":
       return {
         ...state,
-        hover: {
-          kind: "stop",
-          stopId: action.stopId,
-          x: action.x,
-          y: action.y,
-        },
+        hover: { kind: "stop", stopId: action.stopId, x: action.x, y: action.y },
       };
     case "hover/leg":
       return {
         ...state,
-        hover: {
-          kind: "leg",
-          legId: action.legId,
-          x: action.x,
-          y: action.y,
-        },
+        hover: { kind: "leg", legId: action.legId, x: action.x, y: action.y },
       };
     case "hover/clear":
-      return {
-        ...state,
-        hover: null,
-      };
+      return { ...state, hover: null };
     case "selection/hydrate":
-      return {
-        ...state,
-        selection: action.selection,
-        hasHydratedUrl: true,
-      };
+      return { ...state, selection: action.selection, hasHydratedUrl: true };
     case "selection/clear":
-      return {
-        ...state,
-        selection: null,
-        hasHydratedUrl: true,
-      };
-    case "itinerary/seed":
+      return { ...state, selection: null, hasHydratedUrl: true };
+    case "dock/set-mode":
+      return { ...state, dockMode: action.mode, dockCollapsed: false };
+    case "dock/toggle-collapsed":
+      return { ...state, dockCollapsed: !state.dockCollapsed };
+    case "itinerary/seed": {
+      const legs = rebuildLegs(action.stops, []);
       return {
         ...state,
         itinerary: {
           ...state.itinerary,
           stops: action.stops,
-          legs: rebuildLegs(action.stops, []),
+          legs,
           nextStopOrdinal: action.stops.length + 1,
         },
+        playback: syncPlaybackForLegs(state.playback, legs),
       };
+    }
     case "itinerary/select-stop":
       return {
         ...state,
         selection: { kind: "stop", stopId: action.stopId },
         hasHydratedUrl: true,
+        dockMode: "edit",
+        dockCollapsed: false,
         itinerary: {
           ...state.itinerary,
           selectedInsertIndex: getStopIndex(state.itinerary.stops, action.stopId),
         },
         playback: {
           ...state.playback,
-          status: state.playback.status === "playing" ? "paused" : state.playback.status,
+          status:
+            state.playback.status === "playing" ? "paused" : state.playback.status,
         },
       };
-    case "itinerary/select-leg":
+    case "itinerary/select-leg": {
+      const playback = jumpPlaybackToLegStart(
+        state.playback,
+        state.itinerary.legs,
+        Math.max(
+          0,
+          state.itinerary.legs.findIndex((leg) => leg.id === action.legId)
+        )
+      );
+
       return {
         ...state,
         selection: { kind: "leg", legId: action.legId },
         hasHydratedUrl: true,
-        playback: {
-          ...state.playback,
-          activeLegIndex: Math.max(
-            0,
-            state.itinerary.legs.findIndex((leg) => leg.id === action.legId)
-          ),
-          progress: 0,
-          status: state.playback.status === "playing" ? "playing" : "paused",
-          dwellRemainingMs: 0,
-        },
+        dockMode: "edit",
+        dockCollapsed: false,
+        playback,
       };
+    }
     case "itinerary/add-stop": {
       if (state.searchIntent.kind === "replace-anchor") {
         const { stopId } = state.searchIntent;
@@ -215,6 +240,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
               : stop
           )
         );
+        const legs = rebuildLegs(stops, state.itinerary.legs);
 
         return {
           ...state,
@@ -223,9 +249,10 @@ export function appReducer(state: AppState, action: AppAction): AppState {
           itinerary: {
             ...state.itinerary,
             stops,
-            legs: rebuildLegs(stops, state.itinerary.legs),
+            legs,
           },
           selection: { kind: "stop", stopId },
+          playback: syncPlaybackForLegs(state.playback, legs),
         };
       }
 
@@ -242,6 +269,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       const insertAt = Math.min(stops.length, insertAfterIndex + 1);
       stops.splice(insertAt, 0, newStop);
       const normalizedStops = normalizeStopsForDates(stops);
+      const legs = rebuildLegs(normalizedStops, state.itinerary.legs);
 
       return {
         ...state,
@@ -249,11 +277,14 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         itinerary: {
           ...state.itinerary,
           stops: normalizedStops,
-          legs: rebuildLegs(normalizedStops, state.itinerary.legs),
+          legs,
           selectedInsertIndex: insertAt,
           nextStopOrdinal: state.itinerary.nextStopOrdinal + 1,
         },
         selection: { kind: "stop", stopId: newStop.id },
+        dockMode: "edit",
+        dockCollapsed: false,
+        playback: syncPlaybackForLegs(state.playback, legs),
       };
     }
     case "itinerary/update-stop": {
@@ -262,23 +293,19 @@ export function appReducer(state: AppState, action: AppAction): AppState {
           stop.id === action.stopId ? { ...stop, ...action.patch } : stop
         )
       );
+      const legs = rebuildLegs(stops, state.itinerary.legs);
 
       return {
         ...state,
-        itinerary: {
-          ...state.itinerary,
-          stops,
-          legs: rebuildLegs(stops, state.itinerary.legs),
-        },
+        itinerary: { ...state.itinerary, stops, legs },
+        playback: syncPlaybackForLegs(state.playback, legs),
       };
     }
     case "itinerary/remove-stop": {
       const stops = state.itinerary.stops.filter((stop) => stop.id !== action.stopId);
       const legs = rebuildLegs(stops, state.itinerary.legs);
       const selectedLegId =
-        state.selection && state.selection.kind === "leg"
-          ? state.selection.legId
-          : null;
+        state.selection?.kind === "leg" ? state.selection.legId : null;
       const nextSelection =
         state.selection?.kind === "stop" && state.selection.stopId === action.stopId
           ? null
@@ -295,15 +322,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
           legs,
           selectedInsertIndex: null,
         },
-        playback: {
-          ...state.playback,
-          activeLegIndex: Math.min(
-            state.playback.activeLegIndex,
-            Math.max(0, legs.length - 1)
-          ),
-          progress: legs.length === 0 ? 0 : state.playback.progress,
-          status: legs.length === 0 ? "idle" : state.playback.status,
-        },
+        playback: syncPlaybackForLegs(state.playback, legs),
       };
     }
     case "itinerary/move-stop-up": {
@@ -314,15 +333,17 @@ export function appReducer(state: AppState, action: AppAction): AppState {
 
       const stops = [...state.itinerary.stops];
       [stops[index - 1], stops[index]] = [stops[index], stops[index - 1]];
+      const legs = rebuildLegs(stops, state.itinerary.legs);
 
       return {
         ...state,
         itinerary: {
           ...state.itinerary,
           stops,
-          legs: rebuildLegs(stops, state.itinerary.legs),
+          legs,
           selectedInsertIndex: index - 1,
         },
+        playback: syncPlaybackForLegs(state.playback, legs),
       };
     }
     case "itinerary/move-stop-down": {
@@ -333,15 +354,17 @@ export function appReducer(state: AppState, action: AppAction): AppState {
 
       const stops = [...state.itinerary.stops];
       [stops[index], stops[index + 1]] = [stops[index + 1], stops[index]];
+      const legs = rebuildLegs(stops, state.itinerary.legs);
 
       return {
         ...state,
         itinerary: {
           ...state.itinerary,
           stops,
-          legs: rebuildLegs(stops, state.itinerary.legs),
+          legs,
           selectedInsertIndex: index + 1,
         },
+        playback: syncPlaybackForLegs(state.playback, legs),
       };
     }
     case "itinerary/set-leg-mode": {
@@ -352,19 +375,14 @@ export function appReducer(state: AppState, action: AppAction): AppState {
 
       return {
         ...state,
-        itinerary: {
-          ...state.itinerary,
-          legs,
-        },
+        itinerary: { ...state.itinerary, legs },
+        playback: syncPlaybackForLegs(state.playback, legs),
       };
     }
     case "itinerary/set-insert-index":
       return {
         ...state,
-        itinerary: {
-          ...state.itinerary,
-          selectedInsertIndex: action.index,
-        },
+        itinerary: { ...state.itinerary, selectedInsertIndex: action.index },
       };
     case "itinerary/replace-anchor":
       return {
@@ -372,39 +390,31 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         selection: { kind: "stop", stopId: action.stopId },
         searchIntent: { kind: "replace-anchor", stopId: action.stopId },
         searchQuery: "",
+        dockMode: "edit",
+        dockCollapsed: false,
       };
     case "search/query":
-      return {
-        ...state,
-        searchQuery: action.value,
-      };
+      return { ...state, searchQuery: action.value };
     case "device/touch":
-      return {
-        ...state,
-        isTouchDevice: action.value,
-      };
+      return { ...state, isTouchDevice: action.value };
     case "playback/play":
       return {
         ...state,
-        playback: {
-          ...state.playback,
-          status: "playing",
-          activeLegIndex: action.legIndex ?? state.playback.activeLegIndex,
-          progress:
-            action.legIndex !== undefined &&
-            action.legIndex !== state.playback.activeLegIndex
-              ? 0
-              : state.playback.progress,
-          dwellRemainingMs: 0,
-        },
+        playback:
+          action.legIndex !== undefined
+            ? jumpPlaybackToLegStart(
+                { ...state.playback, status: "playing" },
+                state.itinerary.legs,
+                action.legIndex,
+                "playing"
+              )
+            : { ...state.playback, status: "playing" },
+        dockMode: "playback",
       };
     case "playback/pause":
       return {
         ...state,
-        playback: {
-          ...state.playback,
-          status: "paused",
-        },
+        playback: { ...state.playback, status: "paused" },
       };
     case "playback/reset":
       return {
@@ -414,44 +424,73 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     case "playback/set-speed":
       return {
         ...state,
-        playback: {
-          ...state.playback,
-          speed: action.speed,
-        },
+        playback: syncPlaybackState(
+          { ...state.playback, speed: action.speed },
+          state.itinerary.legs
+        ),
       };
     case "playback/set-progress":
+    case "playback/set-trip-progress":
       return {
         ...state,
-        playback: {
-          ...state.playback,
-          progress: Math.max(0, Math.min(1, action.progress)),
-          status: state.playback.status === "idle" ? "paused" : state.playback.status,
-        },
+        playback: syncPlaybackState(
+          {
+            ...state.playback,
+            status:
+              state.playback.status === "idle" ? "paused" : state.playback.status,
+          },
+          state.itinerary.legs,
+          Math.max(0, Math.min(1, action.progress))
+        ),
+      };
+    case "playback/jump-to-leg-start": {
+      const legIndex = state.itinerary.legs.findIndex((leg) => leg.id === action.legId);
+      return {
+        ...state,
+        selection: { kind: "leg", legId: action.legId },
+        playback: jumpPlaybackToLegStart(state.playback, state.itinerary.legs, legIndex),
+      };
+    }
+    case "playback/jump-to-stop":
+      return {
+        ...state,
+        selection: { kind: "stop", stopId: action.stopId },
+        playback: syncPlaybackState(
+          { ...state.playback, status: "paused" },
+          state.itinerary.legs,
+          getStopProgress(state.playback, state.itinerary.legs, action.stopId)
+        ),
+      };
+    case "playback/recompute-frame":
+      return {
+        ...state,
+        playback: syncPlaybackState(state.playback, state.itinerary.legs),
       };
     case "playback/step-next":
       return {
         ...state,
-        playback: {
-          ...state.playback,
-          activeLegIndex: Math.min(
-            Math.max(0, state.itinerary.legs.length - 1),
-            state.playback.activeLegIndex + 1
-          ),
-          progress: 0,
-          dwellRemainingMs: 0,
-          status: "paused",
-        },
+        playback: syncPlaybackState(
+          { ...state.playback, status: "paused" },
+          state.itinerary.legs,
+          getTimelineNavigationProgress(
+            buildTimelineSegments(state.itinerary.legs),
+            state.playback,
+            "next"
+          )
+        ),
       };
     case "playback/step-prev":
       return {
         ...state,
-        playback: {
-          ...state.playback,
-          activeLegIndex: Math.max(0, state.playback.activeLegIndex - 1),
-          progress: 0,
-          dwellRemainingMs: 0,
-          status: "paused",
-        },
+        playback: syncPlaybackState(
+          { ...state.playback, status: "paused" },
+          state.itinerary.legs,
+          getTimelineNavigationProgress(
+            buildTimelineSegments(state.itinerary.legs),
+            state.playback,
+            "prev"
+          )
+        ),
       };
     case "playback/advance-frame":
       return {

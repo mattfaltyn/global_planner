@@ -1,34 +1,41 @@
 import { expect, test } from "@playwright/test";
 
-test("initial load exposes dataset status and search", async ({ page }) => {
+test("initial load exposes itinerary playback UI", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByTestId("dataset-status")).toContainText("Loaded");
   await expect(page.getByLabel("Search airports")).toBeVisible();
+  await expect(page.getByTestId("trip-playback-bar")).toContainText("Vancouver to Porto");
+  await expect(page.getByTestId("itinerary-dock")).toContainText("Travel itinerary");
 });
 
-test("search selects an airport and updates the URL", async ({ page }) => {
+test("search adds a stop and opens edit mode", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByTestId("loading-overlay")).toBeHidden();
 
-  await page.getByLabel("Search airports").fill("JFK");
-  await page
-    .getByRole("button", { name: /john f kennedy international airport/i })
-    .click();
+  await page.getByLabel("Search airports").fill("MAD");
+  await page.getByRole("listbox").getByRole("button").first().click();
 
-  await expect(page).toHaveURL(/airport=/);
-  await expect(page.getByTestId("side-panel")).toContainText(
-    "John F Kennedy International Airport"
-  );
+  await expect(page.getByTestId("itinerary-panel")).toContainText("10 total");
+  await expect(page.getByLabel("Search airports")).toHaveValue("");
 });
 
-test("test api can select a route", async ({ page }) => {
+test("whole-trip playback and test api wiring work", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByTestId("loading-overlay")).toBeHidden();
+
+  await page.getByTestId("trip-playback-bar").getByRole("button", { name: "Play" }).click();
+  await expect(
+    page.getByTestId("trip-playback-bar").getByRole("button", { name: "Pause" })
+  ).toBeVisible();
 
   await page.evaluate(() => {
-    window.__GLOBAL_PLANNER_TEST_API__?.selectRoute("3797__507");
+    window.__GLOBAL_PLANNER_TEST_API__?.selectLeg("seed-stop-4__seed-stop-5");
   });
 
-  await expect(page.getByTestId("side-panel")).toContainText("Route detail");
-  await expect(page.getByTestId("side-panel")).toContainText("Heathrow Airport");
+  await expect(page).toHaveURL(/leg=seed-stop-4__seed-stop-5/);
+  await expect(page.getByTestId("timeline-state")).toContainText("15 timeline segments");
+
+  await page.getByTestId("globe-canvas").getByRole("button", { name: "Porto" }).click();
+  await expect(page).toHaveURL(/stop=seed-stop-1/);
+  await expect(page.getByTestId("test-globe-selection")).toContainText('"stopId":"seed-stop-1"');
 });

@@ -1,12 +1,12 @@
 # Testing Strategy
 
-This repo uses three complementary test layers:
+This repo uses three test layers:
 
-- unit tests for deterministic logic
-- component tests for UI and state behavior
-- Playwright smoke tests for real browser integration
+- unit tests for pure itinerary and dataset logic
+- component tests for reducer-driven UI behavior
+- Playwright smoke tests for integrated browser flows
 
-The Vitest configuration also enforces a full coverage gate.
+Vitest also enforces a full coverage gate.
 
 ## Commands
 
@@ -17,7 +17,7 @@ npm run test:all
 npx vitest run --coverage
 ```
 
-If Playwright browsers are not present yet:
+If Playwright browsers are not installed yet:
 
 ```bash
 npx playwright install
@@ -25,7 +25,7 @@ npx playwright install
 
 ## Coverage Policy
 
-Vitest is configured to require:
+Vitest requires:
 
 - `100%` statements
 - `100%` branches
@@ -38,24 +38,23 @@ Coverage applies across:
 - `components/`
 - `lib/`
 
-The configuration lives in [vitest.config.ts](/Users/mattfaltyn/Desktop/travel/global_planner/vitest.config.ts).
+Configuration lives in [vitest.config.ts](/Users/mattfaltyn/Desktop/travel/global_planner/vitest.config.ts).
 
 ## Unit Tests
 
-Unit tests cover pure logic and data transforms.
+Unit tests cover deterministic logic such as:
 
-Primary areas:
-
-- CSV normalization
-- placeholder-to-null conversion
-- airport validation
-- nonstop route filtering
-- degree thresholding
-- route deduplication
-- distance and duration helpers
-- search ranking
-- URL query parsing and serialization
-- destination filtering and sorting
+- dataset normalization
+- airport validation and route filtering
+- seed itinerary resolution
+- repeated-city stop handling
+- day-count computation
+- leg derivation and mode inference
+- low-altitude air and ground path generation
+- whole-trip timeline segment math
+- trip-progress playback helpers
+- URL parse and serialize helpers
+- itinerary selectors and summary helpers
 
 Key files:
 
@@ -65,19 +64,20 @@ Key files:
 
 ## Component Tests
 
-Component tests exercise React behavior without depending on real WebGL rendering.
+Component tests exercise React behavior without depending on real WebGL output.
 
-Covered behaviors include:
+Covered areas:
 
-- loading and error states
-- dataset hydration
-- search input behavior and keyboard navigation
-- airport and route selection
-- URL synchronization
-- side-panel filtering and sorting
+- dataset loading and seeded itinerary hydration
+- stop and leg selection
+- whole-trip playback controls and scrubber behavior
+- search-as-add-stop behavior
+- dock playback/edit mode switching
+- stop editing and anchor replacement
 - hover tooltip content
-- touch-mode panel layout
-- dynamic renderer selection behavior
+- path-based globe render props
+- traveler marker behavior at timeline boundaries
+- dynamic renderer selection for test mode
 
 Key files:
 
@@ -88,83 +88,90 @@ Key files:
 
 ## Browser E2E Tests
 
-Playwright covers the integrated browser path using a local dev server started by [playwright.config.ts](/Users/mattfaltyn/Desktop/travel/global_planner/playwright.config.ts).
+Playwright runs against an isolated local server started by [playwright.config.ts](/Users/mattfaltyn/Desktop/travel/global_planner/playwright.config.ts).
 
-The configured server command is:
+The browser server command is:
 
 ```bash
-NEXT_PUBLIC_E2E=1 npm run dev
+NEXT_PUBLIC_E2E=1 npm run build && NEXT_PUBLIC_E2E=1 npm run start -- --port 3100
 ```
 
 That mode intentionally changes two things:
 
-- the shell uses `TestGlobeCanvas` instead of the real WebGL globe canvas
+- `GlobeShell` uses `TestGlobeCanvas` instead of the real WebGL globe
 - the browser exposes `window.__GLOBAL_PLANNER_TEST_API__`
 
-Why:
+The isolated server avoids reusing an already-running local dev server, which keeps `NEXT_PUBLIC_E2E=1` deterministic and prevents WebGL-only code paths from leaking into browser automation.
 
-- real canvas pointer automation is brittle for route selection
-- the browser tests are intended to validate app-state wiring, URL sync, and panel rendering
+The E2E suite is meant to validate:
 
-Current smoke scenarios:
+- itinerary-first loading
+- playback bar wiring
+- dock mode behavior
+- URL synchronization
+- stable browser-level state transitions
 
-- initial load exposes dataset status and search
-- search selects an airport and updates the URL
-- test API can select a route and open route detail
+It is not meant to validate pixel-perfect WebGL fidelity.
 
-The E2E specs live in [globe.spec.ts](/Users/mattfaltyn/Desktop/travel/global_planner/tests/e2e/globe.spec.ts).
+Current smoke flows:
+
+- initial load shows dataset status, playback UI, and itinerary summary
+- search adds a stop and opens edit mode
+- whole-trip playback advances and updates progress
+- the test API can jump to itinerary legs and expose state
+
+Specs live in [globe.spec.ts](/Users/mattfaltyn/Desktop/travel/global_planner/tests/e2e/globe.spec.ts).
 
 ## Shared Test Infrastructure
 
 Shared setup lives in [tests/setup.ts](/Users/mattfaltyn/Desktop/travel/global_planner/tests/setup.ts).
 
-Important test doubles:
+Important doubles:
 
 - `loadDataset()` is mocked in shell tests
-- `next/dynamic` is mocked in shell component tests
+- `next/dynamic` is mocked in shell tests
 - `react-globe.gl` is mocked in globe canvas tests
 - `matchMedia` is stubbed for touch-mode logic
-- `ResizeObserver` is stubbed for canvas sizing logic
+- `ResizeObserver` is stubbed for sizing logic
 
 ## Flake Prevention Rules
 
-- do not assert pixel output from the globe canvas
-- prefer semantic text and state assertions over animation timing
-- use the hidden dataset status region to confirm dataset readiness
-- use the E2E test API for route selection instead of brittle pointer choreography
-- keep pure logic in `lib/` testable without DOM or browser dependencies
+- do not assert pixel output from the real globe canvas
+- prefer state and semantic text assertions over animation timing details
+- use the hidden dataset status region to confirm readiness
+- use the guarded E2E test API for itinerary selection when browser pointer automation would be brittle
+- keep timeline and interpolation logic in pure helpers under `lib/`
 
 ## Manual QA Checklist
-
-Run this after meaningful UI or rendering changes.
 
 Desktop Chrome:
 
 - page loads without console errors
-- globe orbits and zooms smoothly
-- hover tooltip appears for airports and routes
-- airport selection opens airport detail
-- route selection opens route detail
+- no global route network is visible by default
+- country borders, itinerary stops, and itinerary legs render
+- play/pause/reset/next/previous controls work
+- the traveler marker moves across the whole trip, not just one leg
+- switching the dock between `Playback` and `Edit` works
 
 Desktop Safari:
 
 - layout remains stable
-- side panel scrolls correctly
-- search and result list remain usable
+- the floating playback bar stays usable
+- search and edit tools remain responsive
 
 Mobile viewport:
 
-- top search box remains visible
-- side panel uses the mobile layout
-- tap selection works without hover dependency
+- search stays visible
+- playback bar stays above the bottom edge
+- dock remains usable as a reduced mobile sheet
 
 Deep links:
 
-- `?airport=<id>` hydrates the correct airport
-- `?airport=<id>&route=<routeId>` hydrates the correct route when valid
-- invalid route IDs fall back to airport detail
+- `?stop=<id>` hydrates the correct stop
+- `?leg=<id>` hydrates the correct leg
+- invalid params fall back cleanly
 
 Data sanity:
 
-- visible dataset status matches the committed manifest counts
-- route and airport detail panels show no weather fields
+- dataset status matches the committed manifest counts
+- no weather fields appear in the UI

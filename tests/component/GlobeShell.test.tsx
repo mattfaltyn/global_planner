@@ -73,7 +73,7 @@ describe("GlobeShell", () => {
 
     expect(screen.getByTestId("globe-canvas-mock")).toBeInTheDocument();
     expect(screen.getByTestId("itinerary-dock")).toHaveTextContent("Travel itinerary");
-    expect(screen.getByTestId("trip-playback-bar")).toHaveTextContent("Trip not started");
+    expect(screen.getByTestId("trip-playback-bar")).toHaveTextContent("Vancouver to Porto");
     expect(screen.getByTestId("timeline-state")).toHaveTextContent("15 timeline segments");
 
     await user.click(screen.getByRole("button", { name: "Edit" }));
@@ -221,7 +221,6 @@ describe("GlobeShell", () => {
       expect(apiState?.playbackStatus).toBe("idle");
       expect(apiState?.activeLegIndex).toBe(0);
       expect(apiState?.tripProgress).toBe(0);
-      expect(screen.getByText("Stop seed-stop-1")).toBeInTheDocument();
     });
 
     view.unmount();

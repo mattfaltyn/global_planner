@@ -1,109 +1,162 @@
 # Architecture Overview
 
-This document describes the implemented v1 architecture, not the original product spec architecture.
+This document describes the implemented V1.2 architecture.
 
-## High-Level Shape
+## Product Shape
 
-Global Planner is a client-heavy Next.js application with a static data model:
+Global Planner is now an itinerary-first globe, not a global route-network browser.
+
+The runtime experience is:
+
+- seed an editable trip after dataset load
+- render only itinerary stops and itinerary legs
+- keep the globe as the primary visual surface
+- drive animation from one whole-trip timeline
+- expose editing through a secondary dock state
+
+There is no backend runtime logic beyond static asset delivery.
+
+## Runtime Stack
 
 - Next.js serves HTML, JS, CSS, fonts, textures, and generated JSON
 - the browser fetches `public/generated/*.json`
-- React reducer state drives selection, search, filters, and panel UI
-- `react-globe.gl` renders the globe, airport points, and route arcs
-
-There is no server runtime logic beyond standard asset delivery.
-
-## Rendering Architecture
-
-V1 uses a single Three.js-based renderer via `react-globe.gl`.
-
-Why:
-
-- one camera model instead of cross-canvas synchronization
-- simpler hover and click picking
-- lower risk than the spec's deck.gl `GlobeView` overlay
-- easier testability for a first release
-
-The governing decision record is [ADR 0001](/Users/mattfaltyn/Desktop/travel/global_planner/docs/adr/0001-threejs-single-renderer.md).
+- `useReducer` owns itinerary, selection, search, dock, and playback state
+- `react-globe.gl` renders the Earth, borders, path-based legs, and traveler marker
 
 ## Main Runtime Components
 
 ### `app/page.tsx`
 
-Entrypoint that renders the globe experience.
+Entrypoint that renders `GlobeShell`.
 
 ### `components/globe/GlobeShell.tsx`
 
 The shell owns:
 
 - dataset loading
+- itinerary seeding from airport data
 - reducer state
 - touch-mode detection
 - URL hydration and synchronization
-- E2E-only test API registration
-- composition of search, panel, tooltip, legend, loading, and error states
+- `requestAnimationFrame` playback ticking
+- E2E test API registration
+- composition of search, dock, playback bar, tooltip, loading, and error states
 
 ### `components/globe/GlobeCanvas.tsx`
 
 The canvas owns:
 
 - `react-globe.gl` configuration
-- point and arc rendering
-- resize handling
+- country border polygons
+- stop marker rendering
+- itinerary leg rendering through `pathsData`
+- traveler marker rendering
 - hover coordinate lookup
-- camera fly-to transitions
-- click routing back to the shell
+- playback and selection camera framing
 
-### `components/ui/*`
+Important rendering rule:
 
-UI components are intentionally dumb and focused:
+- air legs do not use `arcsData`
+- both air and ground legs render from explicit sampled `pathPoints`
 
-- `SearchBox` and `SearchResults` handle search interaction
-- `SidePanel` handles airport and route detail rendering
-- `Tooltip`, `LoadingOverlay`, `ErrorState`, and `EmptyState` cover shell states
+That guarantees lower, more controllable paths with exact endpoint anchoring.
+
+### `components/ui/TripPlaybackBar.tsx`
+
+The floating playback bar owns:
+
+- play / pause / reset
+- previous / next stop navigation
+- speed selection
+- whole-trip progress slider
+- current route summary
+- entry into edit mode
+
+### `components/ui/ItineraryDock.tsx`
+
+The dock owns two modes:
+
+- `Playback`: compact summary-first view
+- `Edit`: stop and leg editing tools
+
+The dock is collapsible and is intentionally lighter than the old always-heavy side panel.
+
+### `components/ui/ItineraryPanel.tsx`
+
+The edit panel owns:
+
+- stop list
+- stop reordering and removal
+- stop editing
+- anchor replacement
+- leg mode editing
+- per-leg playback jump actions
 
 ## State Model
 
-The app uses `useReducer` rather than a global state library.
+State lives in [appState.ts](/Users/mattfaltyn/Desktop/travel/global_planner/lib/state/appState.ts).
 
-State lives in [appState.ts](/Users/mattfaltyn/Desktop/travel/global_planner/lib/state/appState.ts) and includes:
+Top-level state includes:
 
-- dataset load status
+- dataset load state
 - hover state
-- selection state
-- search query
-- panel filter query
-- panel sort key
-- touch-device mode
+- itinerary selection
 - URL hydration flag
+- search query and search intent
+- touch-device flag
+- dock mode and collapsed state
+- itinerary stops and derived legs
+- whole-trip playback state
 
-Pure derivations such as selected airport lookup, selected route lookup, destination filtering, sorting, and URL parsing live in [selectors.ts](/Users/mattfaltyn/Desktop/travel/global_planner/lib/state/selectors.ts).
+Playback is canonicalized around trip progress:
 
-## Data Flow
+- `tripProgress`
+- `activeLegIndex`
+- `activeLegProgress`
+- `phase`
+
+The slider and transport controls operate on this trip-wide timeline rather than a single-leg timeline.
+
+Pure derivations live in [selectors.ts](/Users/mattfaltyn/Desktop/travel/global_planner/lib/state/selectors.ts).
+
+## Itinerary And Timeline Flow
 
 1. `loadDataset()` fetches `manifest.v1.json`, `airports.v1.json`, and `routes.v1.json`.
-2. The loader builds runtime indexes:
-   - `airportsById`
-   - `routesById`
-   - `routeIdsByAirportId`
-3. The shell hydrates the initial selection from `window.location.search`.
-4. Search, click, hover, and panel actions dispatch reducer events.
-5. Selection changes update the URL using `history.replaceState`.
+2. The shell resolves the seeded Vancouver -> Iberia trip against airport anchors.
+3. `deriveLegs()` creates adjacent itinerary legs.
+4. `buildLegPathPoints()` generates explicit sampled path points:
+   - air: low globe arcs with zero-altitude endpoints
+   - ground: near-surface paths with zero-altitude endpoints
+5. `buildTimelineSegments()` creates the whole-trip playback timeline.
+6. Playback helpers convert `tripProgress` into:
+   - active leg
+   - intra-leg progress
+   - travel vs dwell phase
 
-## Deep Linking
+## URL Model
 
-Supported query params:
+The product now uses itinerary-centric query params:
 
-- `?airport=<airportId>`
-- `?airport=<airportId>&route=<routeId>`
+- `?stop=<stopId>`
+- `?leg=<legId>`
 
 Rules:
 
-- invalid airport IDs resolve to no selection
-- invalid route IDs fall back to airport selection if the airport is valid
-- routes must belong to the selected airport or they are ignored
+- invalid params resolve to no selection
+- playback progress is not encoded in the URL
+- old `?airport=` and `?route=` params are not part of the current product model
 
-## Touch And Hover Behavior
+## Camera Model
+
+The renderer uses three framing modes:
+
+- default idle overview: itinerary-fit view with Vancouver and Iberia visible together
+- autoplay playback: stable overview, not per-leg camera chasing
+- manual selection: focused stop or buffered leg framing
+
+This is intentionally calmer than the earlier per-leg fly-to behavior.
+
+## Touch And Hover
 
 Touch mode is inferred from:
 
@@ -114,22 +167,23 @@ Touch mode is inferred from:
 When touch mode is active:
 
 - hover tooltips are disabled
-- selection remains available via tap
-- the side panel switches to its mobile layout class
+- tap selection still works
+- the dock shifts toward the mobile layout behavior
 
 ## E2E-Specific Behavior
 
 When `NEXT_PUBLIC_E2E=1`:
 
-- `GlobeShell` dynamically uses `TestGlobeCanvas` instead of the real globe canvas
+- `GlobeShell` dynamically uses `TestGlobeCanvas`
 - the browser exposes `window.__GLOBAL_PLANNER_TEST_API__`
 
-That hook exists only to stabilize Playwright coverage for route selection and URL-state assertions. It is not part of the product API.
+The test hook exists only to stabilize browser automation for itinerary selection and playback assertions. It is not part of the product API.
 
-## Non-Goals For V1
+## Deliberate Non-Goals
 
 - no deck.gl overlay
-- no runtime data fetching from third parties
-- no climate or weather fields
-- no server persistence
-- no authentication or saved state
+- no global route graph rendering
+- no runtime routing API
+- no climate or weather features
+- no persistence layer
+- no authentication

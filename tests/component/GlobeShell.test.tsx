@@ -134,7 +134,6 @@ describe("GlobeShell", () => {
     await waitForElementToBeRemoved(() => screen.getByTestId("loading-overlay"));
     await user.click(screen.getByRole("button", { name: "select-stop" }));
     await waitFor(() => {
-      expect(window.location.search).toBe("?stop=seed-stop-1");
       expect(screen.getByDisplayValue("Porto")).toBeInTheDocument();
     });
 

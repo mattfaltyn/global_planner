@@ -13,6 +13,8 @@ Vitest also enforces a full coverage gate.
 ```bash
 npm run test
 npm run test:e2e
+npm run test:e2e:real
+npm run test:e2e:all
 npm run test:all
 npx vitest run --coverage
 ```
@@ -121,6 +123,28 @@ Current smoke flows:
 - the test API can jump to itinerary legs and expose state
 
 Specs live in [globe.spec.ts](/Users/mattfaltyn/Desktop/travel/global_planner/tests/e2e/globe.spec.ts).
+
+## Real Renderer Smoke Test
+
+The repo also includes a separate desktop Chromium smoke path that runs against the real globe renderer with no `NEXT_PUBLIC_E2E=1` override.
+
+Use:
+
+```bash
+npm run test:e2e:real
+```
+
+This path is configured in [playwright.real.config.ts](/Users/mattfaltyn/Desktop/travel/global_planner/playwright.real.config.ts) and exists to catch regressions in the real production renderer path that the deterministic `TestGlobeCanvas` harness cannot see.
+
+It intentionally stays small and checks:
+
+- the real globe canvas mounts
+- a real canvas element is present
+- playback can start in desktop Chromium
+- test-only harness controls are absent
+- no console or page errors are emitted during the basic smoke flow
+
+The spec lives in [globe.real.spec.ts](/Users/mattfaltyn/Desktop/travel/global_planner/tests/e2e/globe.real.spec.ts).
 
 ## Shared Test Infrastructure
 

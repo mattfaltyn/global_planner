@@ -6,6 +6,7 @@ import {
   screen,
   waitFor,
   waitForElementToBeRemoved,
+  within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -75,7 +76,9 @@ describe("GlobeShell", () => {
 
     expect(screen.getByTestId("globe-canvas-mock")).toBeInTheDocument();
     expect(screen.getByTestId("itinerary-dock")).toHaveTextContent("Travel itinerary");
-    expect(screen.getByTestId("trip-playback-bar")).toHaveTextContent("Vancouver to Porto");
+    await waitFor(() => {
+      expect(screen.getByTestId("trip-playback-bar")).toHaveTextContent("Vancouver to Porto");
+    });
     expect(screen.getByTestId("timeline-state")).toHaveTextContent("26 timeline segments");
     expect(globeProps?.safeAreaInsets).toEqual({ top: 0, right: 0, bottom: 0, left: 0 });
 
@@ -101,6 +104,57 @@ describe("GlobeShell", () => {
     });
 
     expect(screen.getByLabelText("Search airports")).toHaveValue("");
+  });
+
+  it("hides the mobile add-city search bar while playback is animating", async () => {
+    const user = userEvent.setup();
+    const previousMatchMedia = window.matchMedia;
+
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      writable: true,
+      value: vi.fn().mockImplementation((query: string) => ({
+        matches: query === "(max-width: 960px)" || query === "(hover: none), (pointer: coarse)",
+        media: query,
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    });
+
+    try {
+      render(<GlobeShell />);
+      await waitForElementToBeRemoved(() => screen.getByTestId("loading-overlay"));
+      await waitFor(() => {
+        expect(screen.getByLabelText("Search airports")).toBeInTheDocument();
+      });
+
+      await user.click(
+        within(screen.getByTestId("trip-playback-bar")).getByRole("button", { name: "Play" })
+      );
+      await waitFor(() => {
+        expect(screen.queryByLabelText("Search airports")).not.toBeInTheDocument();
+      });
+      await waitFor(() => {
+        expect(globeProps?.safeAreaInsets?.top).toBeGreaterThan(0);
+      });
+
+      await user.click(
+        within(screen.getByTestId("trip-playback-bar")).getByRole("button", { name: "Pause" })
+      );
+      await waitFor(() => {
+        expect(screen.getByLabelText("Search airports")).toBeInTheDocument();
+      });
+    } finally {
+      Object.defineProperty(window, "matchMedia", {
+        configurable: true,
+        writable: true,
+        value: previousMatchMedia,
+      });
+    }
   });
 
   it("hydrates selected stop and leg from the URL", async () => {

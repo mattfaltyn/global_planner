@@ -174,6 +174,8 @@ export function GlobeShell() {
     state.itinerary.legs
   );
   const selectedLeg = getSelectedLeg(state.selection, state.itinerary.legs);
+  const showMobileSearchBar =
+    layoutMode !== "mobile" || state.playback.status !== "playing";
   const topBarRef = useRef<HTMLDivElement | null>(null);
   const playbackRailRef = useRef<HTMLDivElement | null>(null);
   const dockRef = useRef<HTMLDivElement | null>(null);
@@ -258,8 +260,14 @@ export function GlobeShell() {
         return;
       }
 
-      const topInset = (topBar?.getBoundingClientRect().height ?? 0) + 16;
-      const playbackInset = (playbackRail?.getBoundingClientRect().height ?? 0) + 16;
+      const playbackHeight = playbackRail?.getBoundingClientRect().height ?? 0;
+      const topInset = showMobileSearchBar
+        ? (topBar?.getBoundingClientRect().height ?? 0) + 16
+        : 32;
+      // During active playback, keep the traveler focus above the playback rail
+      // by using a stronger bottom inset than paused/idle states.
+      const playbackInsetFactor = state.playback.status === "playing" ? 0.62 : 0.5;
+      const playbackInset = playbackHeight * playbackInsetFactor + 16;
       const dockInset =
         sheetSnapPoint !== "collapsed"
           ? (dock?.getBoundingClientRect().height ?? 0) + 8
@@ -276,7 +284,7 @@ export function GlobeShell() {
     updateInsets();
 
     const observer = new ResizeObserver(() => updateInsets());
-    if (topBar) {
+    if (topBar && showMobileSearchBar) {
       observer.observe(topBar);
     }
     if (playbackRail) {
@@ -287,7 +295,7 @@ export function GlobeShell() {
     }
 
     return () => observer.disconnect();
-  }, [layoutMode, sheetSnapPoint, state.dockCollapsed, state.dockMode]);
+  }, [layoutMode, sheetSnapPoint, showMobileSearchBar, state.dockCollapsed, state.dockMode]);
 
   useEffect(() => {
     if (state.loadState.status !== "ready" || state.itinerary.stops.length > 0) {
@@ -641,32 +649,34 @@ export function GlobeShell() {
 
           {layoutMode === "mobile" ? (
             <>
-              <div className={styles.mobileTopBar} ref={topBarRef}>
-                <SearchBox
-                  layoutMode={layoutMode}
-                  expanded={searchExpanded}
-                  query={state.searchQuery}
-                  results={searchResults}
-                  placeholder={
-                    state.searchIntent.kind === "replace-anchor"
-                      ? "Replace anchor with a city or airport"
-                      : "Add a city or airport"
-                  }
-                  onQueryChange={(value) => dispatch({ type: "search/query", value })}
-                  onFocus={() => setSearchExpanded(true)}
-                  onBlur={() => {
-                    if (state.searchQuery.trim().length === 0) {
-                      setSearchExpanded(false);
+              {showMobileSearchBar ? (
+                <div className={styles.mobileTopBar} ref={topBarRef}>
+                  <SearchBox
+                    layoutMode={layoutMode}
+                    expanded={searchExpanded}
+                    query={state.searchQuery}
+                    results={searchResults}
+                    placeholder={
+                      state.searchIntent.kind === "replace-anchor"
+                        ? "Replace anchor with a city or airport"
+                        : "Add a city or airport"
                     }
-                  }}
-                  onSelect={(airport) => {
-                    setSearchExpanded(false);
-                    startTransition(() => {
-                      dispatch({ type: "itinerary/add-stop", airport });
-                    });
-                  }}
-                />
-              </div>
+                    onQueryChange={(value) => dispatch({ type: "search/query", value })}
+                    onFocus={() => setSearchExpanded(true)}
+                    onBlur={() => {
+                      if (state.searchQuery.trim().length === 0) {
+                        setSearchExpanded(false);
+                      }
+                    }}
+                    onSelect={(airport) => {
+                      setSearchExpanded(false);
+                      startTransition(() => {
+                        dispatch({ type: "itinerary/add-stop", airport });
+                      });
+                    }}
+                  />
+                </div>
+              ) : null}
 
               <section className={styles.mobileStage}>
                 <GlobeCanvas

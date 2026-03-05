@@ -125,6 +125,21 @@ describe("runtime config and utility modules", () => {
     expect(lateGroundPlaybackFollowPointOfView.lat).toBeCloseTo(37.376172);
     expect(lateGroundPlaybackFollowPointOfView.lng).toBeCloseTo(-8.1403045);
     expect(lateGroundPlaybackFollowPointOfView.altitude).toBe(0.56);
+    const mobileGroundPlaybackFollowPointOfView = getPlaybackFollowPointOfView(
+      { lat: 37.5, lon: -8.2 },
+      { lat: 37.0144, lon: -7.9659 },
+      "ground",
+      216,
+      "travel",
+      0.75,
+      true
+    );
+    expect(
+      Math.abs(mobileGroundPlaybackFollowPointOfView.lat - 37.5)
+    ).toBeLessThan(Math.abs(lateGroundPlaybackFollowPointOfView.lat - 37.5));
+    expect(
+      Math.abs(mobileGroundPlaybackFollowPointOfView.lng + 8.2)
+    ).toBeLessThan(Math.abs(lateGroundPlaybackFollowPointOfView.lng + 8.2));
     expect(
       getPlaybackFollowPointOfView(
         { lat: null, lon: null },

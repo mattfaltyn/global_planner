@@ -337,15 +337,27 @@ function getPlaybackLeadWeight(
   baseLeadWeight: number,
   mode: TravelMode,
   phase: PlaybackPhase,
-  legProgress: number
+  legProgress: number,
+  isTouchDevice = false
 ) {
+  const adjustedBaseLeadWeight =
+    isTouchDevice
+      ? baseLeadWeight * (mode === "ground" ? 0.55 : 0.7)
+      : baseLeadWeight;
+
   if (mode !== "ground" || phase === "dwell") {
-    return baseLeadWeight;
+    return adjustedBaseLeadWeight;
   }
 
   const clampedProgress = clamp(legProgress, 0, 1);
   const easedProgress = 1 - (1 - clampedProgress) ** 2;
-  return clamp(baseLeadWeight + easedProgress * 0.08, baseLeadWeight, baseLeadWeight + 0.08);
+  const leadBoost = isTouchDevice ? 0.04 : 0.08;
+
+  return clamp(
+    adjustedBaseLeadWeight + easedProgress * leadBoost,
+    adjustedBaseLeadWeight,
+    adjustedBaseLeadWeight + leadBoost
+  );
 }
 
 export function getOverviewCameraIntent(stops: ItineraryStop[]): CameraIntent {
@@ -432,14 +444,16 @@ export function getPlaybackFollowCameraIntent(
   travelerPoint: PathPoint,
   destinationStop: ItineraryStop,
   phase: PlaybackPhase,
-  legProgress = 0
+  legProgress = 0,
+  isTouchDevice = false
 ): CameraIntent {
   const profile = getPlaybackProfile(leg.mode, leg.distanceKm ?? 0, phase);
   const leadWeight = getPlaybackLeadWeight(
     profile.leadWeight,
     leg.mode,
     phase,
-    legProgress
+    legProgress,
+    isTouchDevice
   );
   const anchor =
     phase === "dwell"
@@ -526,7 +540,8 @@ export function resolveCameraIntent(context: CameraContext): CameraIntent {
       travelerPoint as PathPoint,
       activeDestinationStop,
       playback.phase,
-      playback.activeLegProgress
+      playback.activeLegProgress,
+      context.isTouchDevice
     );
   }
 
@@ -742,7 +757,8 @@ export function getPlaybackFollowPointOfView(
   mode: TravelMode,
   distanceKm: number | null,
   phase: PlaybackPhase,
-  legProgress = 0
+  legProgress = 0,
+  isTouchDevice = false
 ): GlobePointOfView {
   if (travelerPoint.lat === null || travelerPoint.lon === null) {
     return getOverviewTarget([travelerPoint, destinationPoint]);
@@ -753,7 +769,8 @@ export function getPlaybackFollowPointOfView(
     profile.leadWeight,
     mode,
     phase,
-    legProgress
+    legProgress,
+    isTouchDevice
   );
   if (phase === "dwell") {
     return {

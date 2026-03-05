@@ -37,8 +37,8 @@ describe("PlaybackControls", () => {
       />
     );
 
-    expect(screen.getByText("Leg 3 of 8")).toBeInTheDocument();
-    expect(screen.getByText("Progress: 49%")).toBeInTheDocument();
+    expect(screen.getByText("Leg 3 of 13")).toBeInTheDocument();
+    expect(screen.getByText("Progress: 43%")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Play" }));
     fireEvent.click(screen.getByRole("button", { name: "Reset" }));
@@ -47,7 +47,7 @@ describe("PlaybackControls", () => {
     fireEvent.change(screen.getByLabelText("Playback speed"), {
       target: { value: "2" },
     });
-    fireEvent.change(screen.getByLabelText("Progress: 49%"), {
+    fireEvent.change(screen.getByLabelText("Progress: 43%"), {
       target: { value: "50" },
     });
 

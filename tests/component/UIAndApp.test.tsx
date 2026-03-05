@@ -102,7 +102,7 @@ describe("app shells and UI components", () => {
     expect(screen.getByText("Build a route and press play.")).toBeInTheDocument();
     expect(screen.getByText("Preparing the itinerary globe")).toBeInTheDocument();
     expect(screen.getByText("Title")).toBeInTheDocument();
-    expect(screen.getByTestId("test-globe-summary")).toHaveTextContent("9 stops");
+    expect(screen.getByTestId("test-globe-summary")).toHaveTextContent("14 stops");
     expect(onSelectStop).toHaveBeenCalledWith("seed-stop-0");
     expect(onSelectLeg).toHaveBeenCalledWith("seed-stop-0__seed-stop-1");
     expect(onClearSelection).toHaveBeenCalled();
@@ -262,7 +262,7 @@ describe("app shells and UI components", () => {
     );
 
     expect(screen.getByText("Travel itinerary")).toBeInTheDocument();
-    expect(screen.getByText("Feb 20, 2026 to Apr 10, 2026")).toBeInTheDocument();
+    expect(screen.getByText("Feb 20, 2026 to Apr 30, 2026")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Recenter" }));
     expect(onRecenter).toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "Edit" }));
@@ -523,7 +523,7 @@ describe("app shells and UI components", () => {
 
     expect(within(playbackBar).getByText("Trip playback")).toBeInTheDocument();
     expect(within(playbackBar).getByText("Vancouver to Porto")).toBeInTheDocument();
-    expect(within(playbackBar).getByText("Day 1 of 50")).toBeInTheDocument();
+    expect(within(playbackBar).getByText("Day 1 of 70")).toBeInTheDocument();
     expect(within(playbackBar).getByText("Fri, Feb 20, 2026")).toBeInTheDocument();
     expect(screen.getByText("This stop is unresolved. Use search to replace its anchor airport.")).toBeInTheDocument();
     expect(screen.getByText("Unresolved")).toBeInTheDocument();

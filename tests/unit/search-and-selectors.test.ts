@@ -22,6 +22,7 @@ import {
   resolveSeedStop,
   resolveSeededItinerary,
 } from "../../lib/itinerary/resolveStops";
+import { seededTravelModes } from "../../lib/itinerary/seed";
 import {
   parseItinerarySelectionFromQuery,
   serializeItinerarySelectionToQuery,
@@ -174,17 +175,8 @@ describe("itinerary search, selectors, and helpers", () => {
       },
     ]);
 
-    expect(legs).toHaveLength(8);
-    expect(legs.map((leg) => leg.mode)).toEqual([
-      "air",
-      "ground",
-      "ground",
-      "ground",
-      "air",
-      "ground",
-      "ground",
-      "ground",
-    ]);
+    expect(legs).toHaveLength(stops.length - 1);
+    expect(legs.map((leg) => leg.mode)).toEqual([...seededTravelModes]);
     expect(overridden[4].mode).toBe("ground");
     expect(inferTravelMode(stops[0], stops[1], 7490)).toBe("air");
     expect(inferTravelMode(stops[1], stops[2], 275)).toBe("ground");
@@ -237,25 +229,32 @@ describe("itinerary search, selectors, and helpers", () => {
     expect(getSelectedLeg({ kind: "leg", legId: "missing" }, legs)).toBeNull();
     expect(getLegByIndex(legs, 4)?.id).toBe(legs[4].id);
     expect(getLegByIndex(legs, 99)).toBeNull();
-    expect(getTravelModeCounts(legs)).toEqual({ air: 2, ground: 6 });
+    const expectedModeCounts = seededTravelModes.reduce(
+      (counts, mode) => {
+        counts[mode] += 1;
+        return counts;
+      },
+      { air: 0, ground: 0 }
+    );
+    expect(getTravelModeCounts(legs)).toEqual(expectedModeCounts);
     expect(getTripDateSpan(stops)).toEqual({
       start: "2026-02-20",
-      end: "2026-04-10",
+      end: "2026-04-30",
     });
     expect(getTripDateSpan([{ ...stops[0], departureDate: null }])).toBeNull();
     expect(getPlaybackProgressPercent(playback)).toBe(34);
-    expect(getPlaybackCalendarProgressPercent(stops, legs, playback)).toBe(35);
+    expect(getPlaybackCalendarProgressPercent(stops, legs, playback)).toBe(36);
     expect(getPlaybackDaySummary(stops, legs, playback)).toEqual({
-      currentDay: 18,
-      totalDays: 50,
-      currentDateLabel: "Mon, Mar 9, 2026",
-      rangeLabel: "Fri, Feb 20, 2026 -> Fri, Apr 10, 2026",
+      currentDay: 26,
+      totalDays: 70,
+      currentDateLabel: "Tue, Mar 17, 2026",
+      rangeLabel: "Fri, Feb 20, 2026 -> Thu, Apr 30, 2026",
     });
     const itineraryPointOfView = getItineraryFitPointOfView(stops);
     expect(itineraryPointOfView.lat).toBeGreaterThan(35);
-    expect(itineraryPointOfView.lat).toBeLessThan(45);
-    expect(itineraryPointOfView.lng).toBeLessThan(-10);
-    expect(itineraryPointOfView.lng).toBeGreaterThan(-90);
+    expect(itineraryPointOfView.lat).toBeLessThan(65);
+    expect(itineraryPointOfView.lng).toBeLessThan(20);
+    expect(itineraryPointOfView.lng).toBeGreaterThan(-130);
     expect(itineraryPointOfView.altitude).toBe(1.62);
     expect(getTripProgressFromCalendarProgress(stops, legs, 1, 0.25)).toBeGreaterThan(0.2);
     expect(getTripProgressFromCalendarProgress(stops, legs, 1, 0.25)).toBeLessThan(0.25);
@@ -296,10 +295,10 @@ describe("itinerary search, selectors, and helpers", () => {
     );
 
     expect(getPlaybackDaySummary(stops, [orphanLeg], orphanPlayback)).toEqual({
-      currentDay: 35,
-      totalDays: 50,
-      currentDateLabel: "Thu, Mar 26, 2026",
-      rangeLabel: "Fri, Feb 20, 2026 -> Fri, Apr 10, 2026",
+      currentDay: 48,
+      totalDays: 70,
+      currentDateLabel: "Wed, Apr 8, 2026",
+      rangeLabel: "Fri, Feb 20, 2026 -> Thu, Apr 30, 2026",
     });
     expect(getPlaybackCalendarProgressPercent(stops, [orphanLeg], orphanPlayback)).toBe(69);
     expect(Math.max(...mediumHaulPath.map((point) => point.altitude))).toBeCloseTo(0.018, 6);
@@ -318,10 +317,10 @@ describe("itinerary search, selectors, and helpers", () => {
         phase: "travel",
       })
     ).toEqual({
-      currentDay: 50,
-      totalDays: 50,
-      currentDateLabel: "Fri, Apr 10, 2026",
-      rangeLabel: "Fri, Feb 20, 2026 -> Fri, Apr 10, 2026",
+      currentDay: 70,
+      totalDays: 70,
+      currentDateLabel: "Thu, Apr 30, 2026",
+      rangeLabel: "Fri, Feb 20, 2026 -> Thu, Apr 30, 2026",
     });
 
     expect(
@@ -335,9 +334,9 @@ describe("itinerary search, selectors, and helpers", () => {
       })
     ).toEqual({
       currentDay: 2,
-      totalDays: 50,
+      totalDays: 70,
       currentDateLabel: "Sat, Feb 21, 2026",
-      rangeLabel: "Fri, Feb 20, 2026 -> Fri, Apr 10, 2026",
+      rangeLabel: "Fri, Feb 20, 2026 -> Thu, Apr 30, 2026",
     });
 
     expect(
@@ -446,10 +445,10 @@ describe("itinerary search, selectors, and helpers", () => {
     const airPath = buildLegPathPoints(stops[0], stops[1], "air");
     const groundPath = buildLegPathPoints(stops[1], stops[2], "ground");
 
-    expect(segments).toHaveLength(16);
+    expect(segments).toHaveLength(26);
     expect(segments[0]).toMatchObject({ kind: "travel", legIndex: 0, durationMs: 1800 });
     expect(segments[1]).toMatchObject({ kind: "dwell", legIndex: 0, durationMs: 700 });
-    expect(getTotalTimelineDurationMs(segments, 1)).toBe(23600);
+    expect(getTotalTimelineDurationMs(segments, 1)).toBe(38500);
     expect(midAirFrame).toMatchObject({
       activeLegIndex: 0,
       phase: "travel",

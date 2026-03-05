@@ -142,6 +142,7 @@ describe("GlobeCanvas", () => {
 
   it("renders itinerary-only path data, configures controls, and focuses a selected stop", async () => {
     const { stops, legs } = createResolvedFixtureItinerary();
+    const resolvedStopCount = stops.filter((stop) => stop.lat !== null && stop.lon !== null).length;
 
     render(
       <GlobeCanvas
@@ -182,7 +183,7 @@ describe("GlobeCanvas", () => {
     expect(Array.isArray(latestGlobeProps?.polygonsData)).toBe(true);
     expect((latestGlobeProps?.polygonsData as object[]).length).toBeGreaterThan(150);
     expect(latestGlobeProps?.labelsData).toBeUndefined();
-    expect((latestGlobeProps?.pointsData as object[])).toHaveLength(stops.length);
+    expect((latestGlobeProps?.pointsData as object[])).toHaveLength(resolvedStopCount);
     expect((latestGlobeProps?.pathsData as object[])).toHaveLength(legs.length);
     expect(latestGlobeProps?.arcsData).toBeUndefined();
     expect(latestGlobeProps?.rendererConfig).toEqual({
@@ -336,6 +337,7 @@ describe("GlobeCanvas", () => {
 
   it("renders the traveler marker and distinguishes active and visited stops", () => {
     const { stops, legs } = createResolvedFixtureItinerary();
+    const resolvedStopCount = stops.filter((stop) => stop.lat !== null && stop.lon !== null).length;
 
     render(
       <GlobeCanvas
@@ -363,7 +365,7 @@ describe("GlobeCanvas", () => {
     const pointRadius = latestGlobeProps?.pointRadius as (obj: object) => number;
     const pointAltitude = latestGlobeProps?.pointAltitude as (obj: object) => number;
 
-    expect(points).toHaveLength(stops.length + 3);
+    expect(points).toHaveLength(resolvedStopCount + 3);
     const travelerGlow = points.find((point) => point.kind === "traveler-glow");
     const travelerHalo = points.find((point) => point.kind === "traveler-halo");
     const traveler = points.find((point) => point.kind === "traveler");

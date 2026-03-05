@@ -20,7 +20,7 @@ test("search adds a stop and opens edit mode", async ({ page }) => {
   await page.getByLabel("Search airports").fill("MAD");
   await page.getByRole("listbox").getByRole("button").first().click();
 
-  await expect(page.getByTestId("itinerary-panel")).toContainText("10 total");
+  await expect(page.getByTestId("itinerary-panel")).toContainText("15 total");
   await expect(page.getByLabel("Search airports")).toHaveValue("");
 });
 
@@ -70,7 +70,7 @@ test("whole-trip playback and test api wiring work", async ({ page }) => {
   });
 
   await expect(page).toHaveURL(/leg=seed-stop-4__seed-stop-5/);
-  await expect(page.getByTestId("timeline-state")).toContainText("16 timeline segments");
+  await expect(page.getByTestId("timeline-state")).toContainText("26 timeline segments");
 
   await page.getByTestId("globe-canvas").getByRole("button", { name: "Porto" }).click();
   await expect(page).toHaveURL(/stop=seed-stop-1/);
@@ -82,7 +82,7 @@ test("whole-trip playback and test api wiring work", async ({ page }) => {
     .toMatchObject({
       playbackStatus: "paused",
       visibleLabelCount: 0,
-      visiblePathCount: 8,
-      visibleStopCount: 9,
+      visiblePathCount: 13,
+      visibleStopCount: 14,
     });
 });

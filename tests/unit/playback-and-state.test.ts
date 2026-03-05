@@ -65,7 +65,7 @@ describe("playback, timeline, reducer, and selector edges", () => {
     expect(getTripProgressFromLegPosition([], 0, 0.4, "travel", 1)).toBe(0);
     expect(getTripProgressFromLegPosition(zeroSegments as never, 0, 0.4, "travel", 1)).toBe(0);
     expect(getTripProgressFromLegPosition(segments, 0, 0.5, "dwell", 1)).toBeCloseTo(
-      0.0762711864
+      0.0467532468
     );
     expect(getTripProgressFromLegPosition(segments, 999, 0.2, "travel", 1)).toBe(1);
     const nanFrame = getTimelineFrameFromTripProgress(segments, Number.NaN, 1);

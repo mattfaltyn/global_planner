@@ -202,6 +202,42 @@ describe("GlobeCanvas", () => {
     );
   });
 
+  it("filters non-renderable leg paths before passing data to the globe layer", () => {
+    const { stops, legs } = createResolvedFixtureItinerary();
+    const invalidLeg = {
+      ...legs[0],
+      id: "invalid-leg",
+      pathPoints: [],
+    };
+    const malformedLeg = {
+      ...legs[1],
+      id: "malformed-leg",
+      pathPoints: [{ lat: Number.NaN, lon: 10, altitude: 0 }],
+    };
+    const legsWithInvalid = [...legs, invalidLeg, malformedLeg];
+
+    render(
+      <GlobeCanvas
+        stops={stops}
+        legs={legsWithInvalid}
+        selection={{ kind: "leg", legId: invalidLeg.id }}
+        playback={createPlayback()}
+        enableHover
+        onHoverStop={vi.fn()}
+        onHoverLeg={vi.fn()}
+        onClearHover={vi.fn()}
+        onSelectStop={vi.fn()}
+        onSelectLeg={vi.fn()}
+        onClearSelection={vi.fn()}
+      />
+    );
+
+    const pathData = latestGlobeProps?.pathsData as Array<{ id?: string }>;
+    expect(pathData).toHaveLength(legs.length);
+    expect(pathData.some((path) => path.id === invalidLeg.id)).toBe(false);
+    expect(pathData.some((path) => path.id === malformedLeg.id)).toBe(false);
+  });
+
   it("tracks the active playback leg and derives active, future, and selected path styling", () => {
     const { stops, legs } = createResolvedFixtureItinerary();
 

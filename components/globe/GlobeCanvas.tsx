@@ -16,6 +16,7 @@ import type {
   ItineraryLeg,
   ItinerarySelection,
   ItineraryStop,
+  PathPoint,
   PlaybackState,
   RenderLegState,
 } from "../../lib/data/types";
@@ -201,6 +202,18 @@ function getTravelerTrailPath(
   };
 }
 
+function isFinitePathPoint(point: PathPoint) {
+  return (
+    Number.isFinite(point.lat) &&
+    Number.isFinite(point.lon) &&
+    Number.isFinite(point.altitude)
+  );
+}
+
+function hasRenderablePath(pathPoints: PathPoint[]) {
+  return pathPoints.length >= 2 && pathPoints.every((point) => isFinitePathPoint(point));
+}
+
 function getTravelerPulseStrength(playback: PlaybackState) {
   if (playback.status !== "playing") {
     return 0;
@@ -350,18 +363,28 @@ export function GlobeCanvas({
 
           return shouldRenderLegInPlaybackWindow(leg.legIndex, renderWindow);
         })
+        // Ignore unresolved or malformed paths so Globe internals never receive
+        // empty/non-finite coordinates.
+        .filter((leg) => hasRenderablePath(leg.pathPoints))
         .map(({ legIndex: _legIndex, ...leg }) => leg),
     [legs, playback.activeLegIndex, playback.status, renderWindow, selection]
   );
 
   const travelerTrail = useMemo(
-    () =>
-      getTravelerTrailPath(
+    () => {
+      const trail = getTravelerTrailPath(
         activeLeg,
         travelerPoint,
         playback.activeLegProgress ?? 0,
         playback.phase
-      ),
+      );
+
+      if (!trail) {
+        return null;
+      }
+
+      return hasRenderablePath(trail.pathPoints) ? trail : null;
+    },
     [activeLeg, playback.activeLegProgress, playback.phase, travelerPoint]
   );
 

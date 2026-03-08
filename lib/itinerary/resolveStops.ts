@@ -1,6 +1,17 @@
 import type { AirportRecord, ItineraryStop } from "../data/types";
 import { seededItineraryStops, type SeedStopInput } from "./seed";
 
+type FallbackLocation = { lat: number; lon: number };
+
+const cityCountryFallbackCoords: Record<string, FallbackLocation> = {
+  "Zakopane|Poland": { lat: 49.2992, lon: 19.9496 },
+  "Limerick|Ireland": { lat: 52.6638, lon: -8.6267 },
+};
+
+function getFallbackCoords(city: string, country: string): FallbackLocation | null {
+  return cityCountryFallbackCoords[`${city}|${country}`] ?? null;
+}
+
 function parseDateParts(value: string) {
   const [year, month, day] = value.split("-").map(Number);
   return { year, month, day };
@@ -76,6 +87,7 @@ export function resolveSeedStop(
     seed.city,
     seed.country
   );
+  const fallback = airport ? null : getFallbackCoords(seed.city, seed.country);
 
   return {
     id: `seed-stop-${index}`,
@@ -84,8 +96,8 @@ export function resolveSeedStop(
     city: seed.city,
     country: seed.country,
     anchorAirportId: airport?.id ?? null,
-    lat: airport?.lat ?? null,
-    lon: airport?.lon ?? null,
+    lat: airport?.lat ?? fallback?.lat ?? null,
+    lon: airport?.lon ?? fallback?.lon ?? null,
     arrivalDate: seed.arrivalDate,
     departureDate: seed.departureDate,
     dayCount: getDayCount(seed.arrivalDate, seed.departureDate),

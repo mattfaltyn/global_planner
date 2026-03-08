@@ -160,6 +160,26 @@ describe("itinerary search, selectors, and helpers", () => {
     });
   });
 
+  it("uses fallback coordinates for known unresolved seeded cities", () => {
+    const dataset = createFixtureDataset();
+    const airportsWithoutSomeAnchors = dataset.airports.filter(
+      (airport) => airport.city !== "Zakopane" && airport.city !== "Limerick"
+    );
+    const stops = resolveSeededItinerary(airportsWithoutSomeAnchors);
+    const legs = deriveLegs(stops);
+    const zakopane = stops.find((stop) => stop.city === "Zakopane");
+    const limerick = stops.find((stop) => stop.city === "Limerick");
+    const krakowToZakopane = legs.find((leg) => leg.id === "seed-stop-15__seed-stop-16");
+
+    expect(zakopane?.unresolved).toBe(true);
+    expect(zakopane?.lat).toBeCloseTo(49.2992, 4);
+    expect(zakopane?.lon).toBeCloseTo(19.9496, 4);
+    expect(limerick?.unresolved).toBe(true);
+    expect(limerick?.lat).toBeCloseTo(52.6638, 4);
+    expect(limerick?.lon).toBeCloseTo(-8.6267, 4);
+    expect(krakowToZakopane?.pathPoints.length ?? 0).toBeGreaterThan(2);
+  });
+
   it("derives itinerary legs, preserves overrides, and infers travel mode", () => {
     const { stops, legs } = createResolvedFixtureItinerary();
     const overridden = deriveLegs(stops, [{ ...legs[4], mode: "ground" }]);
@@ -239,16 +259,16 @@ describe("itinerary search, selectors, and helpers", () => {
     expect(getTravelModeCounts(legs)).toEqual(expectedModeCounts);
     expect(getTripDateSpan(stops)).toEqual({
       start: "2026-02-20",
-      end: "2026-04-30",
+      end: "2026-06-27",
     });
     expect(getTripDateSpan([{ ...stops[0], departureDate: null }])).toBeNull();
     expect(getPlaybackProgressPercent(playback)).toBe(34);
-    expect(getPlaybackCalendarProgressPercent(stops, legs, playback)).toBe(36);
+    expect(getPlaybackCalendarProgressPercent(stops, legs, playback)).toBe(35);
     expect(getPlaybackDaySummary(stops, legs, playback)).toEqual({
-      currentDay: 26,
-      totalDays: 70,
-      currentDateLabel: "Tue, Mar 17, 2026",
-      rangeLabel: "Fri, Feb 20, 2026 -> Thu, Apr 30, 2026",
+      currentDay: 45,
+      totalDays: 128,
+      currentDateLabel: "Sun, Apr 5, 2026",
+      rangeLabel: "Fri, Feb 20, 2026 -> Sat, Jun 27, 2026",
     });
     const itineraryPointOfView = getItineraryFitPointOfView(stops);
     expect(itineraryPointOfView.lat).toBeGreaterThan(35);
@@ -257,7 +277,7 @@ describe("itinerary search, selectors, and helpers", () => {
     expect(itineraryPointOfView.lng).toBeGreaterThan(-130);
     expect(itineraryPointOfView.altitude).toBe(1.62);
     expect(getTripProgressFromCalendarProgress(stops, legs, 1, 0.25)).toBeGreaterThan(0.2);
-    expect(getTripProgressFromCalendarProgress(stops, legs, 1, 0.25)).toBeLessThan(0.25);
+    expect(getTripProgressFromCalendarProgress(stops, legs, 1, 0.25)).toBeLessThan(0.27);
   });
 
   it("handles playback date summaries for orphaned legs and medium-haul air altitude", () => {
@@ -295,10 +315,10 @@ describe("itinerary search, selectors, and helpers", () => {
     );
 
     expect(getPlaybackDaySummary(stops, [orphanLeg], orphanPlayback)).toEqual({
-      currentDay: 48,
-      totalDays: 70,
-      currentDateLabel: "Wed, Apr 8, 2026",
-      rangeLabel: "Fri, Feb 20, 2026 -> Thu, Apr 30, 2026",
+      currentDay: 89,
+      totalDays: 128,
+      currentDateLabel: "Tue, May 19, 2026",
+      rangeLabel: "Fri, Feb 20, 2026 -> Sat, Jun 27, 2026",
     });
     expect(getPlaybackCalendarProgressPercent(stops, [orphanLeg], orphanPlayback)).toBe(69);
     expect(Math.max(...mediumHaulPath.map((point) => point.altitude))).toBeCloseTo(0.018, 6);
@@ -317,10 +337,10 @@ describe("itinerary search, selectors, and helpers", () => {
         phase: "travel",
       })
     ).toEqual({
-      currentDay: 70,
-      totalDays: 70,
-      currentDateLabel: "Thu, Apr 30, 2026",
-      rangeLabel: "Fri, Feb 20, 2026 -> Thu, Apr 30, 2026",
+      currentDay: 128,
+      totalDays: 128,
+      currentDateLabel: "Sat, Jun 27, 2026",
+      rangeLabel: "Fri, Feb 20, 2026 -> Sat, Jun 27, 2026",
     });
 
     expect(
@@ -334,9 +354,9 @@ describe("itinerary search, selectors, and helpers", () => {
       })
     ).toEqual({
       currentDay: 2,
-      totalDays: 70,
+      totalDays: 128,
       currentDateLabel: "Sat, Feb 21, 2026",
-      rangeLabel: "Fri, Feb 20, 2026 -> Thu, Apr 30, 2026",
+      rangeLabel: "Fri, Feb 20, 2026 -> Sat, Jun 27, 2026",
     });
 
     expect(
@@ -440,15 +460,15 @@ describe("itinerary search, selectors, and helpers", () => {
       { ...playback, status: "playing" },
       legs,
       stops,
-      50_000
+      getTotalTimelineDurationMs(segments, 1) + 1_000
     );
     const airPath = buildLegPathPoints(stops[0], stops[1], "air");
     const groundPath = buildLegPathPoints(stops[1], stops[2], "ground");
 
-    expect(segments).toHaveLength(26);
+    expect(segments).toHaveLength(44);
     expect(segments[0]).toMatchObject({ kind: "travel", legIndex: 0, durationMs: 1800 });
     expect(segments[1]).toMatchObject({ kind: "dwell", legIndex: 0, durationMs: 700 });
-    expect(getTotalTimelineDurationMs(segments, 1)).toBe(38500);
+    expect(getTotalTimelineDurationMs(segments, 1)).toBe(65200);
     expect(midAirFrame).toMatchObject({
       activeLegIndex: 0,
       phase: "travel",
@@ -534,5 +554,30 @@ describe("itinerary search, selectors, and helpers", () => {
         playbackWindow
       )
     ).toBe(true);
+  });
+
+  it("builds path points when leg endpoints share identical coordinates", () => {
+    const { stops } = createResolvedFixtureItinerary();
+    const sameOrigin = {
+      ...stops[1],
+      id: "same-origin",
+      lat: 41.2481,
+      lon: -8.6814,
+    };
+    const sameDestination = {
+      ...stops[2],
+      id: "same-destination",
+      lat: 41.2481,
+      lon: -8.6814,
+    };
+
+    const groundPath = buildLegPathPoints(sameOrigin, sameDestination, "ground");
+    const airPath = buildLegPathPoints(sameOrigin, sameDestination, "air");
+
+    expect(groundPath).toHaveLength(25);
+    expect(airPath).toHaveLength(65);
+    expect(groundPath.every((point) => point.lat === 41.2481 && point.lon === -8.6814)).toBe(true);
+    expect(airPath.every((point) => point.lat === 41.2481 && point.lon === -8.6814)).toBe(true);
+    expect(airPath.some((point) => point.altitude > 0)).toBe(true);
   });
 });

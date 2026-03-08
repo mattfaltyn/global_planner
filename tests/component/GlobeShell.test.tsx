@@ -10,7 +10,13 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createFixtureDataset, fixtureAirports, fixtureRoutes } from "../fixtures/dataset";
+import {
+  createFixtureDataset,
+  createResolvedFixtureItinerary,
+  fixtureAirports,
+  fixtureRoutes,
+} from "../fixtures/dataset";
+import { buildTimelineSegments } from "../../lib/itinerary/timeline";
 
 let globeProps: Record<string, (...args: unknown[]) => void> | null = null;
 
@@ -63,6 +69,8 @@ describe("GlobeShell", () => {
 
   it("shows the loading state and then renders the seeded itinerary", async () => {
     const user = userEvent.setup();
+    const seeded = createResolvedFixtureItinerary();
+    const timelineSegments = buildTimelineSegments(seeded.legs, seeded.stops);
     render(<GlobeShell />);
 
     await waitFor(() => {
@@ -79,16 +87,19 @@ describe("GlobeShell", () => {
     await waitFor(() => {
       expect(screen.getByTestId("trip-playback-bar")).toHaveTextContent("Vancouver to Porto");
     });
-    expect(screen.getByTestId("timeline-state")).toHaveTextContent("26 timeline segments");
+    expect(screen.getByTestId("timeline-state")).toHaveTextContent(
+      `${timelineSegments.length} timeline segments`
+    );
     expect(globeProps?.safeAreaInsets).toEqual({ top: 0, right: 0, bottom: 0, left: 0 });
 
     await user.click(screen.getByRole("button", { name: "Edit" }));
-    expect(screen.getByTestId("itinerary-panel")).toHaveTextContent("14 total");
+    expect(screen.getByTestId("itinerary-panel")).toHaveTextContent(`${seeded.stops.length} total`);
     expect(screen.getAllByText("Lisbon, Portugal")).toHaveLength(2);
   });
 
   it("adds a stop from search and clears the query", async () => {
     const user = userEvent.setup();
+    const seeded = createResolvedFixtureItinerary();
     render(<GlobeShell />);
 
     await waitForElementToBeRemoved(() => screen.getByTestId("loading-overlay"));
@@ -100,7 +111,7 @@ describe("GlobeShell", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText("15 total")).toBeInTheDocument();
+      expect(screen.getByText(`${seeded.stops.length + 1} total`)).toBeInTheDocument();
     });
 
     expect(screen.getByLabelText("Search airports")).toHaveValue("");
@@ -259,6 +270,7 @@ describe("GlobeShell", () => {
 
   it("registers the E2E test API when enabled", async () => {
     process.env.NEXT_PUBLIC_E2E = "1";
+    const seeded = createResolvedFixtureItinerary();
     const view = render(<GlobeShell />);
 
     await waitFor(() => {
@@ -292,8 +304,8 @@ describe("GlobeShell", () => {
 
     await waitFor(() => {
       const apiState = window.__GLOBAL_PLANNER_TEST_API__?.getState();
-      expect(apiState?.stopCount).toBe(14);
-      expect(apiState?.legCount).toBe(13);
+      expect(apiState?.stopCount).toBe(seeded.stops.length);
+      expect(apiState?.legCount).toBe(seeded.legs.length);
       expect(apiState?.playbackStatus).toBe("idle");
       expect(apiState?.activeLegIndex).toBe(0);
       expect(apiState?.tripProgress).toBe(0);
